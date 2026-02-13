@@ -1657,6 +1657,34 @@ HTML_TEMPLATE = """
 
     <script>
         let lastUpdate = null;
+        const userToggledSections = {};
+
+        function isSectionOpen(sectionId) {
+            if (sectionId in userToggledSections) return userToggledSections[sectionId];
+            return false;
+        }
+
+        function collapsedAttr(sectionId) {
+            return isSectionOpen(sectionId) ? '' : ' collapsed';
+        }
+
+        function hiddenAttr(sectionId) {
+            return isSectionOpen(sectionId) ? '' : ' hidden';
+        }
+
+        function countLabel(items) {
+            if (!items) return 0;
+            if (Array.isArray(items)) return items.length;
+            if (typeof items === 'object') {
+                return Object.values(items).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+            }
+            return 0;
+        }
+
+        function containerCount(c) {
+            if (!c) return 0;
+            return (c.registries ? c.registries.length : 0) + (c.images ? c.images.length : 0);
+        }
 
         function updateUI() {
             fetch('/api/data')
@@ -1688,7 +1716,7 @@ HTML_TEMPLATE = """
                     } else {
                         if (data.status.end_time) {
                             const endTime = new Date(data.status.end_time);
-                            document.getElementById('scan-time').textContent = 
+                            document.getElementById('scan-time').textContent =
                                 'Completed: ' + endTime.toLocaleString();
                         }
                     }
@@ -1715,15 +1743,17 @@ HTML_TEMPLATE = """
         }
 
         function renderCriticalFindings(findings) {
+            const count = countLabel(findings);
+            const sid = 'critical';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible" onclick="toggleSection(this)">
-                            🚨 Critical Findings
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🚨 Critical Findings (${count})
                         </h2>
                         <span class="severity-badge severity-critical">CRITICAL</span>
                     </div>
-                    <div class="collapsible-content">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${findings && findings.length > 0 ? findings.map(f => `
                             <div class="finding-item critical">
                                 <div class="finding-type">${f.type}</div>
@@ -1743,15 +1773,17 @@ HTML_TEMPLATE = """
         }
 
         function renderHighFindings(findings) {
+            const count = countLabel(findings);
+            const sid = 'high';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible" onclick="toggleSection(this)">
-                            🔐 Secrets & Tokens
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🔐 Secrets & Tokens (${count})
                         </h2>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
-                    <div class="collapsible-content">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${findings && findings.length > 0 ? findings.map(f => `
                             <div class="finding-item high">
                                 <div class="finding-type">${f.type}</div>
@@ -1771,15 +1803,17 @@ HTML_TEMPLATE = """
         }
 
         function renderDosVectors(findings) {
+            const count = countLabel(findings);
+            const sid = 'dos';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible" onclick="toggleSection(this)">
-                            💥 DoS Attack Vectors
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            💥 DoS Attack Vectors (${count})
                         </h2>
                         <span class="severity-badge severity-high">HIGH</span>
                     </div>
-                    <div class="collapsible-content">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${findings && findings.length > 0 ? findings.map(f => `
                             <div class="finding-item high">
                                 <div class="finding-type">${f.issue}</div>
@@ -1798,15 +1832,17 @@ HTML_TEMPLATE = """
         }
 
         function renderConfigExposure(findings) {
+            const count = countLabel(findings);
+            const sid = 'config';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible" onclick="toggleSection(this)">
-                            ⚙️ Configuration Exposure
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            ⚙️ Configuration Exposure (${count})
                         </h2>
                         <span class="severity-badge severity-medium">MEDIUM</span>
                     </div>
-                    <div class="collapsible-content">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${findings && findings.length > 0 ? findings.map(f => `
                             <div class="finding-item medium">
                                 <div class="finding-type">${f.type}</div>
@@ -1825,6 +1861,8 @@ HTML_TEMPLATE = """
         }
 
         function renderK8sFindings(findings) {
+            const count = countLabel(findings);
+            const sid = 'k8s';
             let content = '';
             if (findings && Object.keys(findings).length > 0) {
                 for (const [type, items] of Object.entries(findings)) {
@@ -1847,12 +1885,12 @@ HTML_TEMPLATE = """
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible" onclick="toggleSection(this)">
-                            ☸️ Kubernetes Metadata
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            ☸️ Kubernetes Metadata (${count})
                         </h2>
                         <span class="severity-badge severity-medium">MEDIUM</span>
                     </div>
-                    <div class="collapsible-content">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${content}
                     </div>
                 </div>
@@ -1860,6 +1898,8 @@ HTML_TEMPLATE = """
         }
 
         function renderContainers(containers) {
+            const count = containerCount(containers);
+            const sid = 'containers';
             let content = '';
             if (containers && (containers.registries.length > 0 || containers.images.length > 0)) {
                 if (containers.registries.length > 0) {
@@ -1896,12 +1936,12 @@ HTML_TEMPLATE = """
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible collapsed" onclick="toggleSection(this)">
-                            🐳 Container Infrastructure
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🐳 Container Infrastructure (${count})
                         </h2>
                         <span class="severity-badge severity-low">INFO</span>
                     </div>
-                    <div class="collapsible-content hidden">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${content}
                     </div>
                 </div>
@@ -1909,15 +1949,17 @@ HTML_TEMPLATE = """
         }
 
         function renderInternalRoutes(routes) {
+            const count = countLabel(routes);
+            const sid = 'routes';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible collapsed" onclick="toggleSection(this)">
-                            🛣️ Internal Routes
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🛣️ Internal Routes (${count})
                         </h2>
                         <span class="severity-badge severity-low">INFO</span>
                     </div>
-                    <div class="collapsible-content hidden">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${routes && routes.length > 0 ? `
                             <div class="finding-item">
                                 <div class="finding-type">Discovered Routes (${routes.length})</div>
@@ -1937,15 +1979,17 @@ HTML_TEMPLATE = """
         }
 
         function renderFqdns(fqdns) {
+            const count = countLabel(fqdns);
+            const sid = 'fqdns';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible collapsed" onclick="toggleSection(this)">
-                            🌐 FQDNs & Network Topology
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🌐 FQDNs & Network Topology (${count})
                         </h2>
                         <span class="severity-badge severity-low">INFO</span>
                     </div>
-                    <div class="collapsible-content hidden">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${fqdns && fqdns.length > 0 ? `
                             <div class="finding-item">
                                 <div class="finding-type">Discovered Domains (${fqdns.length})</div>
@@ -1965,15 +2009,17 @@ HTML_TEMPLATE = """
         }
 
         function renderScrapeTargets(targets) {
+            const count = countLabel(targets);
+            const sid = 'scrape';
             return `
                 <div class="findings-section">
                     <div class="section-header">
-                        <h2 class="section-title collapsible collapsed" onclick="toggleSection(this)">
-                            🎯 Scrape Targets
+                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                            🎯 Scrape Targets (${count})
                         </h2>
                         <span class="severity-badge severity-low">INFO</span>
                     </div>
-                    <div class="collapsible-content hidden">
+                    <div class="collapsible-content${hiddenAttr(sid)}">
                         ${targets && targets.length > 0 ? targets.map(t => `
                             <div class="finding-item">
                                 <div class="finding-type">${t.job}</div>
@@ -1992,7 +2038,9 @@ HTML_TEMPLATE = """
             `;
         }
 
-        function toggleSection(element) {
+        function toggleSection(element, sectionId) {
+            const isCurrentlyCollapsed = element.classList.contains('collapsed');
+            userToggledSections[sectionId] = isCurrentlyCollapsed;
             element.classList.toggle('collapsed');
             const content = element.closest('.section-header').nextElementSibling;
             content.classList.toggle('hidden');
@@ -2074,6 +2122,36 @@ def create_web_ui(scanner, port=5000):
     return app
 
 
+def parse_target(target_str):
+    """Parse a target string in ip:port format. Returns (host, port) or None on error."""
+    target_str = target_str.strip()
+    if not target_str:
+        return None
+
+    if target_str.startswith('['):
+        bracket_end = target_str.find(']')
+        if bracket_end == -1:
+            return None
+        host = target_str[1:bracket_end]
+        rest = target_str[bracket_end + 1:]
+        if rest.startswith(':'):
+            try:
+                port = int(rest[1:])
+                return (host, port)
+            except ValueError:
+                return None
+        return None
+
+    parts = target_str.rsplit(':', 1)
+    if len(parts) != 2:
+        return None
+    try:
+        port = int(parts[1])
+        return (parts[0], port)
+    except ValueError:
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='FireThief - Prometheus Security Scanner',
@@ -2083,29 +2161,58 @@ Examples:
   %(prog)s -i 192.168.1.100 -p 9090 --web-ui
   %(prog)s -i prometheus.internal.com -p 9090 -v --save-profiles --web-ui
   %(prog)s -i 10.0.0.50 -p 9090 --web-ui --web-port 8080
+  %(prog)s -T 192.168.1.100:9090 10.0.0.50:9090
+  %(prog)s -T 192.168.1.100:9090 10.0.0.50:80 -v --save-profiles
         """
     )
-    parser.add_argument('-i', '--ip', required=True, help='Target IP or hostname')
-    parser.add_argument('-p', '--port', type=int, required=True, help='Target port')
+    parser.add_argument('-i', '--ip', help='Target IP or hostname')
+    parser.add_argument('-p', '--port', type=int, help='Target port')
+    parser.add_argument('-T', '--targets', nargs='+', metavar='IP:PORT',
+                        help='One or more targets in ip:port format')
     parser.add_argument('-t', '--timeout', type=int, default=10, help='Request timeout (default: 10s)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--save-profiles', action='store_true', help='Save downloaded pprof profiles')
     parser.add_argument('-o', '--output', help='Output directory for saved profiles')
     parser.add_argument('--web-ui', action='store_true', help='Launch web UI')
     parser.add_argument('--web-port', type=int, default=5000, help='Web UI port (default: 5000)')
-    
+
     args = parser.parse_args()
-    
-    scanner = PrometheusScanner(args.ip, args.port, args.timeout, args.verbose, args.save_profiles, args.output)
-    
+
+    targets = []
+
+    if args.targets:
+        for t in args.targets:
+            parsed = parse_target(t)
+            if parsed is None:
+                print(f"[!] Invalid target format: '{t}' (expected ip:port)")
+                sys.exit(1)
+            targets.append(parsed)
+
+    if args.ip and args.port:
+        targets.append((args.ip, args.port))
+    elif args.ip or args.port:
+        if not args.targets:
+            print("[!] Both -i/--ip and -p/--port are required when not using -T/--targets")
+            sys.exit(1)
+
+    if not targets:
+        print("[!] No targets specified. Use -i/-p or -T to specify targets.")
+        parser.print_help()
+        sys.exit(1)
+
     if args.web_ui:
+        if len(targets) > 1:
+            print(f"[!] Web UI mode supports one target at a time. Scanning first target: {targets[0][0]}:{targets[0][1]}")
+            targets = [targets[0]]
+
+        host, port = targets[0]
+        scanner = PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output)
         create_web_ui(scanner, args.web_port)
         time.sleep(1)
-    
-    if args.web_ui:
+
         scan_thread = threading.Thread(target=scanner.run, daemon=False)
         scan_thread.start()
-        
+
         print("\n[*] Scan running... Press Ctrl+C to exit")
         try:
             scan_thread.join()
@@ -2115,8 +2222,15 @@ Examples:
         except KeyboardInterrupt:
             print("\n[+] Shutting down...")
     else:
-        scanner.run()
-    
+        for idx, (host, port) in enumerate(targets):
+            if len(targets) > 1:
+                print(f"\n{'#'*80}")
+                print(f"# TARGET {idx + 1}/{len(targets)}: {host}:{port}")
+                print(f"{'#'*80}")
+
+            scanner = PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output)
+            scanner.run()
+
     return 0
 
 

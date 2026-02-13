@@ -76,7 +76,7 @@ flask-cors>=4.0.0
 
 ## 🎯 Quick Start
 ```bash
-# Basic scan
+# Basic scan (single target)
 python3 firethief.py -i 192.168.1.100 -p 9090
 
 # Scan with web interface (recommended)
@@ -84,20 +84,29 @@ python3 firethief.py -i prometheus.internal.com -p 9090 --web-ui
 
 # Full scan with profile saving and verbose output
 python3 firethief.py -i 10.0.0.50 -p 9090 --web-ui --save-profiles -v
+
+# Scan multiple targets
+python3 firethief.py -T 192.168.1.100:9090 10.0.0.50:9090 172.16.0.1:80
+
+# Multiple targets with verbose output and profile saving
+python3 firethief.py -T 192.168.1.100:9090 10.0.0.50:80 -v --save-profiles
 ```
 
 ## 📖 Usage
 
 ### Command Line Options
 ```
-usage: firethief.py [-h] -i IP -p PORT [-t TIMEOUT] [-v] [--save-profiles]
-                    [-o OUTPUT] [--web-ui] [--web-port WEB_PORT]
+usage: firethief.py [-h] [-i IP] [-p PORT] [-T IP:PORT [IP:PORT ...]]
+                    [-t TIMEOUT] [-v] [--save-profiles] [-o OUTPUT]
+                    [--web-ui] [--web-port WEB_PORT]
 
 FireThief - Prometheus Security Scanner
 
-required arguments:
+target arguments (use -i/-p for a single target, or -T for one or more):
   -i IP, --ip IP              Target IP or hostname
   -p PORT, --port PORT        Target port
+  -T IP:PORT [IP:PORT ...], --targets IP:PORT [IP:PORT ...]
+                              One or more targets in ip:port format
 
 optional arguments:
   -h, --help                  Show this help message and exit
@@ -109,6 +118,23 @@ optional arguments:
   --web-ui                    Launch real-time web interface
   --web-port WEB_PORT         Web UI port (default: 5000)
 ```
+
+### Multi-Target Scanning
+
+Use `-T` / `--targets` to scan multiple hosts in a single run. Each target is specified as `ip:port`:
+
+```bash
+# Scan three Prometheus instances
+python3 firethief.py -T 10.0.0.1:9090 10.0.0.2:9090 10.0.0.3:9090
+
+# Mix with other options
+python3 firethief.py -T 192.168.1.100:9090 172.16.0.50:80 -v --save-profiles -t 15
+
+# IPv6 targets use bracket notation
+python3 firethief.py -T [::1]:9090 192.168.1.1:9090
+```
+
+Targets are scanned sequentially, with each target getting its own full three-phase scan and report. The web UI (`--web-ui`) operates on a single target.
 
 ## 🔎 What It Detects
 
@@ -176,7 +202,7 @@ FireThief includes a real-time web interface with:
 
 - **Live Progress Tracking** - See scan phases and current actions
 - **Dynamic Statistics** - Critical/High/Medium/Low findings counter
-- **Collapsible Sections** - Organized findings by category
+- **Collapsible Sections** - All sections start collapsed with result counts in the headline (e.g., "Critical Findings (3)"). Click to expand. Sections you unfold remain open across live data refreshes while the scan is still running.
 - **Severity Color Coding** - Red (Critical), Orange (High), Yellow (Medium), Blue (Low)
 - **Dark Cyberpunk Theme** - Inspired by professional security tools
 
