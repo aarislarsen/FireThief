@@ -24,7 +24,7 @@ import tempfile
 import os
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, render_template_string, send_from_directory, jsonify
+from flask import Flask, render_template_string, send_from_directory, jsonify, request
 from flask_cors import CORS
 import threading
 import webbrowser
@@ -49,11 +49,11 @@ BANNER = """
 """
 
 class PrometheusScanner:
-    def __init__(self, host: str, port: int, timeout: int = 10, verbose: bool = False, 
-                 save_profiles: bool = False, output_dir: str = None):
+    def __init__(self, host: str, port: int, timeout: int = 10, verbose: bool = False,
+                 save_profiles: bool = False, output_dir: str = None, scheme: str = 'http'):
         self.host = host
         self.port = port
-        self.base_url = f"http://{host}:{port}"
+        self.base_url = f"{scheme}://{host}:{port}"
         self.timeout = timeout
         self.verbose = verbose
         self.save_profiles = save_profiles
@@ -1246,6 +1246,7 @@ class PrometheusScanner:
             'progress': self.progress_percent,
             'start_time': self.scan_start.isoformat() if self.scan_start else None,
             'end_time': self.scan_end.isoformat() if self.scan_end else None,
+            'target': self.base_url,
         }
 
 
@@ -1255,7 +1256,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FireThief - {{ target }}</title>
+    <title>FireThief - {{ targets|join(', ') }}</title>
     <style>
         * {
             margin: 0;
@@ -1278,9 +1279,9 @@ HTML_TEMPLATE = """
 
         header {
             background: linear-gradient(135deg, #1e2749 0%, #2d3561 100%);
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
             border: 1px solid #3a4466;
         }
@@ -1293,7 +1294,7 @@ HTML_TEMPLATE = """
 
         h1 {
             color: #ff6b6b;
-            font-size: 2.5em;
+            font-size: 1.8em;
             text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
             letter-spacing: 2px;
         }
@@ -1306,7 +1307,7 @@ HTML_TEMPLATE = """
 
         .target-info {
             background: rgba(255, 107, 107, 0.1);
-            padding: 15px 25px;
+            padding: 10px 16px;
             border-radius: 5px;
             border-left: 4px solid #ff6b6b;
         }
@@ -1324,19 +1325,19 @@ HTML_TEMPLATE = """
 
         .progress-section {
             background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
             border: 1px solid #3a4466;
         }
 
         .progress-bar {
             width: 100%;
-            height: 30px;
+            height: 22px;
             background: rgba(0, 0, 0, 0.3);
-            border-radius: 15px;
+            border-radius: 11px;
             overflow: hidden;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .progress-fill {
@@ -1357,12 +1358,12 @@ HTML_TEMPLATE = """
 
         .status-badge {
             display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
             font-weight: bold;
             text-transform: uppercase;
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .status-running { background: #ff9f43; color: #000; }
@@ -1371,23 +1372,23 @@ HTML_TEMPLATE = """
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
         }
 
         .stat-card {
             background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
-            padding: 25px;
-            border-radius: 10px;
+            padding: 16px;
+            border-radius: 6px;
             text-align: center;
             border: 1px solid #3a4466;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
         }
 
         .stat-card.critical { border-left: 4px solid #ff6b6b; }
@@ -1396,9 +1397,9 @@ HTML_TEMPLATE = """
         .stat-card.low { border-left: 4px solid #48dbfb; }
 
         .stat-number {
-            font-size: 3em;
+            font-size: 2.2em;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
         .stat-card.critical .stat-number { color: #ff6b6b; }
@@ -1415,9 +1416,9 @@ HTML_TEMPLATE = """
 
         .findings-section {
             background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 14px;
             border: 1px solid #3a4466;
         }
 
@@ -1425,22 +1426,22 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
             border-bottom: 2px solid #3a4466;
         }
 
         .section-title {
-            font-size: 1.5em;
+            font-size: 1.15em;
             color: #e0e0e0;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .severity-badge {
-            padding: 5px 15px;
-            border-radius: 20px;
+            padding: 3px 10px;
+            border-radius: 12px;
             font-size: 0.7em;
             font-weight: bold;
             text-transform: uppercase;
@@ -1454,9 +1455,9 @@ HTML_TEMPLATE = """
 
         .finding-item {
             background: rgba(255, 255, 255, 0.03);
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border-radius: 4px;
             border-left: 4px solid #48dbfb;
             transition: background 0.3s ease;
         }
@@ -1478,8 +1479,8 @@ HTML_TEMPLATE = """
 
         .finding-value {
             background: rgba(0, 0, 0, 0.3);
-            padding: 10px 15px;
-            border-radius: 5px;
+            padding: 8px 12px;
+            border-radius: 3px;
             font-family: 'Courier New', monospace;
             color: #ff6b6b;
             margin: 10px 0;
@@ -1503,19 +1504,19 @@ HTML_TEMPLATE = """
 
         .empty-state {
             text-align: center;
-            padding: 40px;
+            padding: 24px;
             color: #48dbfb;
         }
 
         .empty-state-icon {
-            font-size: 3em;
-            margin-bottom: 15px;
+            font-size: 2em;
+            margin-bottom: 10px;
         }
 
         footer {
             text-align: center;
-            padding: 30px;
-            margin-top: 40px;
+            padding: 20px;
+            margin-top: 20px;
             color: #a8b2d1;
             border-top: 1px solid #3a4466;
         }
@@ -1551,13 +1552,33 @@ HTML_TEMPLATE = """
         }
 
         .collapsible-content {
-            max-height: 5000px;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
+            max-height: 600px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: #3a4466 transparent;
+        }
+
+        .collapsible-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .collapsible-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .collapsible-content::-webkit-scrollbar-thumb {
+            background: #3a4466;
+            border-radius: 3px;
+        }
+
+        .collapsible-content::-webkit-scrollbar-thumb:hover {
+            background: #4a5a8a;
         }
 
         .collapsible-content.hidden {
             max-height: 0;
+            overflow: hidden;
         }
 
         .domain-list {
@@ -1573,6 +1594,56 @@ HTML_TEMPLATE = """
             border-left: 2px solid #48dbfb;
         }
 
+        .target-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .target-btn {
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            border: 1px solid #3a4466;
+            color: #a8b2d1;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            transition: border-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .target-btn:hover {
+            border-color: #64ffda;
+        }
+
+        .target-btn.active {
+            border-color: #ff6b6b;
+            color: #e0e0e0;
+            box-shadow: 0 0 8px rgba(255, 107, 107, 0.2);
+        }
+
+        .target-btn .target-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .target-status-dot.red { background: #ff6b6b; }
+        .target-status-dot.orange { background: #ff9f43; }
+        .target-status-dot.green { background: #48dbfb; background: #2ecc71; }
+        .target-status-dot.blue { background: #48dbfb; }
+        .target-status-dot.scanning { animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
@@ -1584,7 +1655,7 @@ HTML_TEMPLATE = """
             }
 
             h1 {
-                font-size: 1.8em;
+                font-size: 1.4em;
             }
         }
     </style>
@@ -1598,12 +1669,16 @@ HTML_TEMPLATE = """
                     <p class="subtitle">Prometheus Security Assessment Framework</p>
                 </div>
                 <div class="target-info">
-                    <h2>Target</h2>
-                    <p>{{ target }}</p>
-                    <p style="font-size: 0.8em; margin-top: 5px;">Started: <span id="scan-time">{{ scan_time }}</span></p>
+                    <h2 id="current-target-label">Target</h2>
+                    <p id="current-target-url">{{ targets[0] if targets else '' }}</p>
+                    <p style="font-size: 0.8em; margin-top: 5px;"><span id="scan-time"></span></p>
                 </div>
             </div>
         </header>
+
+        {% if targets|length > 1 %}
+        <div class="target-bar" id="target-bar"></div>
+        {% endif %}
 
         <div class="progress-section">
             <div class="progress-bar">
@@ -1657,7 +1732,37 @@ HTML_TEMPLATE = """
 
     <script>
         let lastUpdate = null;
+        let currentTarget = 0;
+        const targetCount = {{ targets|length }};
         const userToggledSections = {};
+        let anyScanRunning = true;
+
+        function selectTarget(idx) {
+            currentTarget = idx;
+            lastUpdate = null;
+            Object.keys(userToggledSections).forEach(k => delete userToggledSections[k]);
+            updateUI();
+        }
+
+        function updateTargetBar() {
+            const bar = document.getElementById('target-bar');
+            if (!bar) return;
+            fetch('/api/targets')
+                .then(r => r.json())
+                .then(targets => {
+                    anyScanRunning = targets.some(t => t.status === 'running' || t.status === 'initializing');
+                    bar.innerHTML = targets.map((t, i) => {
+                        const isScanning = (t.status === 'running' || t.status === 'initializing');
+                        const dotClass = t.dot + (isScanning ? ' scanning' : '');
+                        return '<button class="target-btn' + (i === currentTarget ? ' active' : '') + '"'
+                            + ' onclick="selectTarget(' + i + ')">'
+                            + '<span class="target-status-dot ' + dotClass + '"></span>'
+                            + t.url
+                            + ' (' + t.progress + '%)'
+                            + '</button>';
+                    }).join('');
+                });
+        }
 
         function isSectionOpen(sectionId) {
             if (sectionId in userToggledSections) return userToggledSections[sectionId];
@@ -1687,9 +1792,12 @@ HTML_TEMPLATE = """
         }
 
         function updateUI() {
-            fetch('/api/data')
+            if (targetCount > 1) updateTargetBar();
+
+            fetch('/api/data?target=' + currentTarget)
                 .then(response => response.json())
                 .then(data => {
+                    document.getElementById('current-target-url').textContent = data.status.target || '';
                     document.getElementById('stat-critical').textContent = data.stats.critical;
                     document.getElementById('stat-high').textContent = data.stats.high;
                     document.getElementById('stat-medium').textContent = data.stats.medium;
@@ -1706,19 +1814,20 @@ HTML_TEMPLATE = """
                     statusBadge.className = 'status-badge status-' + data.status.status;
                     statusBadge.textContent = data.status.status.toUpperCase();
 
+                    const scanTime = document.getElementById('scan-time');
+                    if (data.status.end_time) {
+                        scanTime.textContent = 'Completed: ' + new Date(data.status.end_time).toLocaleString();
+                    } else if (data.status.start_time) {
+                        scanTime.textContent = 'Started: ' + new Date(data.status.start_time).toLocaleString();
+                    }
+
                     if (JSON.stringify(data.findings) !== lastUpdate) {
                         renderFindings(data.findings);
                         lastUpdate = JSON.stringify(data.findings);
                     }
 
-                    if (data.status.status === 'running') {
+                    if (anyScanRunning) {
                         setTimeout(updateUI, 1000);
-                    } else {
-                        if (data.status.end_time) {
-                            const endTime = new Date(data.status.end_time);
-                            document.getElementById('scan-time').textContent =
-                                'Completed: ' + endTime.toLocaleString();
-                        }
                     }
                 })
                 .catch(error => {
@@ -2053,41 +2162,76 @@ HTML_TEMPLATE = """
 """
 
 
-def create_web_ui(scanner, port=5000):
+def create_web_ui(scanners, port=5000):
+    if not isinstance(scanners, list):
+        scanners = [scanners]
+
     app = Flask(__name__)
     CORS(app)
-    
+
     @app.route('/')
     def index():
-        scan_time = scanner.scan_start.strftime('%Y-%m-%d %H:%M:%S')
-        return render_template_string(HTML_TEMPLATE, target=f"{scanner.host}:{scanner.port}", scan_time=scan_time)
-    
+        targets_list = [s.base_url for s in scanners]
+        return render_template_string(HTML_TEMPLATE, targets=targets_list)
+
+    @app.route('/api/targets')
+    def get_targets():
+        result = []
+        for s in scanners:
+            has_critical = any(c.get('severity') == 'CRITICAL' for c in s.findings['credentials'])
+            has_endpoints = len(s.findings['accessible_endpoints']) > 0
+            stats = s.get_summary_stats()
+            has_findings = (stats['critical'] + stats['high'] + stats['medium']
+                           + stats['dos_vectors'] + len(s.findings['secrets'])) > 0
+
+            if has_critical:
+                dot = 'red'
+            elif has_findings:
+                dot = 'orange'
+            elif has_endpoints:
+                dot = 'green'
+            else:
+                dot = 'blue'
+
+            result.append({
+                'url': s.base_url,
+                'status': s.scan_status,
+                'progress': s.progress_percent,
+                'dot': dot,
+            })
+        return jsonify(result)
+
     @app.route('/api/data')
     def get_data():
+        idx = request.args.get('target', 0, type=int)
+        if idx < 0 or idx >= len(scanners):
+            idx = 0
+        scanner = scanners[idx]
+
         stats = scanner.get_summary_stats()
         status = scanner.get_status()
-        
+
         critical_findings = [c for c in scanner.findings['credentials'] if c.get('severity') == 'CRITICAL']
         high_findings = [c for c in scanner.findings['credentials'] if c.get('severity') == 'HIGH'] + scanner.findings['secrets']
         dos_vectors = scanner.findings['dos_vectors']
         config_exposure = scanner.findings['config_exposure']
-        
+
         k8s_findings = {}
         for item in scanner.findings['k8s']:
             k8s_type = item['type']
             if k8s_type not in k8s_findings:
                 k8s_findings[k8s_type] = []
             k8s_findings[k8s_type].append(item['value'])
-        
+
         containers = {
             'registries': sorted(set(c['value'] for c in scanner.findings['containers'] if c['type'] == 'registry')),
             'images': sorted(set(c['value'] for c in scanner.findings['containers'] if c['type'] == 'image'))
         }
-        
+
         internal_routes = sorted(set(r['route'] for r in scanner.findings['internal_routes']))
         fqdns = sorted(set(f['value'] for f in scanner.findings['fqdns']))
         scrape_targets = scanner.findings['scrape_targets'][:20]
-        
+
         return jsonify({
             'stats': stats,
             'status': status,
@@ -2103,53 +2247,67 @@ def create_web_ui(scanner, port=5000):
                 'scrape_targets': scrape_targets
             }
         })
-    
-    @app.route('/output/<path:filename>')
-    def output_file(filename):
-        return send_from_directory(scanner.output_dir, filename)
-    
+
     def run_server():
         app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False)
-    
+
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
     time.sleep(1)
-    
+
     url = f"http://127.0.0.1:{port}"
     print(f"\n[+] Web UI available at: {url}")
-    webbrowser.open(url)
-    
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
     return app
 
 
 def parse_target(target_str):
-    """Parse a target string in ip:port format. Returns (host, port) or None on error."""
+    """Parse a target URL in http://ip:port or https://ip:port format.
+    Returns (scheme, host, port) or None on error."""
     target_str = target_str.strip()
     if not target_str:
         return None
 
-    if target_str.startswith('['):
-        bracket_end = target_str.find(']')
-        if bracket_end == -1:
-            return None
-        host = target_str[1:bracket_end]
-        rest = target_str[bracket_end + 1:]
-        if rest.startswith(':'):
-            try:
-                port = int(rest[1:])
-                return (host, port)
-            except ValueError:
-                return None
+    parsed = urlparse(target_str)
+    if parsed.scheme not in ('http', 'https'):
+        return None
+    if not parsed.hostname:
         return None
 
-    parts = target_str.rsplit(':', 1)
-    if len(parts) != 2:
-        return None
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == 'https' else 80
+
+    return (parsed.scheme, parsed.hostname, port)
+
+
+def read_targets_file(filepath):
+    """Read targets from a file, one http://ip:port per line.
+    Returns list of (scheme, host, port) tuples."""
+    targets = []
     try:
-        port = int(parts[1])
-        return (parts[0], port)
-    except ValueError:
-        return None
+        with open(filepath, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parsed = parse_target(line)
+                if parsed is None:
+                    print(f"[!] Invalid target on line {line_num}: '{line}' "
+                          f"(expected http://ip:port or https://ip:port)")
+                    sys.exit(1)
+                targets.append(parsed)
+    except FileNotFoundError:
+        print(f"[!] Targets file not found: {filepath}")
+        sys.exit(1)
+    except PermissionError:
+        print(f"[!] Permission denied reading: {filepath}")
+        sys.exit(1)
+    return targets
 
 
 def main():
@@ -2161,14 +2319,14 @@ Examples:
   %(prog)s -i 192.168.1.100 -p 9090 --web-ui
   %(prog)s -i prometheus.internal.com -p 9090 -v --save-profiles --web-ui
   %(prog)s -i 10.0.0.50 -p 9090 --web-ui --web-port 8080
-  %(prog)s -T 192.168.1.100:9090 10.0.0.50:9090
-  %(prog)s -T 192.168.1.100:9090 10.0.0.50:80 -v --save-profiles
+  %(prog)s -T targets.txt
+  %(prog)s -T targets.txt -v --save-profiles
         """
     )
     parser.add_argument('-i', '--ip', help='Target IP or hostname')
     parser.add_argument('-p', '--port', type=int, help='Target port')
-    parser.add_argument('-T', '--targets', nargs='+', metavar='IP:PORT',
-                        help='One or more targets in ip:port format')
+    parser.add_argument('-T', '--targets', metavar='FILE',
+                        help='File containing targets, one per line in http://ip:port format')
     parser.add_argument('-t', '--timeout', type=int, default=10, help='Request timeout (default: 10s)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--save-profiles', action='store_true', help='Save downloaded pprof profiles')
@@ -2181,15 +2339,10 @@ Examples:
     targets = []
 
     if args.targets:
-        for t in args.targets:
-            parsed = parse_target(t)
-            if parsed is None:
-                print(f"[!] Invalid target format: '{t}' (expected ip:port)")
-                sys.exit(1)
-            targets.append(parsed)
+        targets.extend(read_targets_file(args.targets))
 
     if args.ip and args.port:
-        targets.append((args.ip, args.port))
+        targets.append(('http', args.ip, args.port))
     elif args.ip or args.port:
         if not args.targets:
             print("[!] Both -i/--ip and -p/--port are required when not using -T/--targets")
@@ -2201,34 +2354,36 @@ Examples:
         sys.exit(1)
 
     if args.web_ui:
-        if len(targets) > 1:
-            print(f"[!] Web UI mode supports one target at a time. Scanning first target: {targets[0][0]}:{targets[0][1]}")
-            targets = [targets[0]]
+        scanners = []
+        for scheme, host, port in targets:
+            scanners.append(PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output, scheme=scheme))
 
-        host, port = targets[0]
-        scanner = PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output)
-        create_web_ui(scanner, args.web_port)
+        create_web_ui(scanners, args.web_port)
         time.sleep(1)
 
-        scan_thread = threading.Thread(target=scanner.run, daemon=False)
+        def run_all_scans():
+            for scanner in scanners:
+                scanner.run()
+
+        scan_thread = threading.Thread(target=run_all_scans, daemon=False)
         scan_thread.start()
 
-        print("\n[*] Scan running... Press Ctrl+C to exit")
+        print(f"\n[*] Scanning {len(scanners)} target(s)... Press Ctrl+C to exit")
         try:
             scan_thread.join()
-            print("\n[*] Scan complete. Web UI still available. Press Ctrl+C to exit...")
+            print("\n[*] All scans complete. Web UI still available. Press Ctrl+C to exit...")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\n[+] Shutting down...")
     else:
-        for idx, (host, port) in enumerate(targets):
+        for idx, (scheme, host, port) in enumerate(targets):
             if len(targets) > 1:
                 print(f"\n{'#'*80}")
-                print(f"# TARGET {idx + 1}/{len(targets)}: {host}:{port}")
+                print(f"# TARGET {idx + 1}/{len(targets)}: {scheme}://{host}:{port}")
                 print(f"{'#'*80}")
 
-            scanner = PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output)
+            scanner = PrometheusScanner(host, port, args.timeout, args.verbose, args.save_profiles, args.output, scheme=scheme)
             scanner.run()
 
     return 0

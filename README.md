@@ -85,28 +85,28 @@ python3 firethief.py -i prometheus.internal.com -p 9090 --web-ui
 # Full scan with profile saving and verbose output
 python3 firethief.py -i 10.0.0.50 -p 9090 --web-ui --save-profiles -v
 
-# Scan multiple targets
-python3 firethief.py -T 192.168.1.100:9090 10.0.0.50:9090 172.16.0.1:80
+# Scan multiple targets from a file
+python3 firethief.py -T targets.txt --web-ui
 
 # Multiple targets with verbose output and profile saving
-python3 firethief.py -T 192.168.1.100:9090 10.0.0.50:80 -v --save-profiles
+python3 firethief.py -T targets.txt -v --save-profiles
 ```
 
 ## 📖 Usage
 
 ### Command Line Options
 ```
-usage: firethief.py [-h] [-i IP] [-p PORT] [-T IP:PORT [IP:PORT ...]]
-                    [-t TIMEOUT] [-v] [--save-profiles] [-o OUTPUT]
-                    [--web-ui] [--web-port WEB_PORT]
+usage: firethief.py [-h] [-i IP] [-p PORT] [-T FILE] [-t TIMEOUT] [-v]
+                    [--save-profiles] [-o OUTPUT] [--web-ui]
+                    [--web-port WEB_PORT]
 
 FireThief - Prometheus Security Scanner
 
-target arguments (use -i/-p for a single target, or -T for one or more):
+target arguments (use -i/-p for a single target, or -T for a file of targets):
   -i IP, --ip IP              Target IP or hostname
   -p PORT, --port PORT        Target port
-  -T IP:PORT [IP:PORT ...], --targets IP:PORT [IP:PORT ...]
-                              One or more targets in ip:port format
+  -T FILE, --targets FILE     File containing targets, one per line in
+                              http://ip:port format
 
 optional arguments:
   -h, --help                  Show this help message and exit
@@ -121,20 +121,29 @@ optional arguments:
 
 ### Multi-Target Scanning
 
-Use `-T` / `--targets` to scan multiple hosts in a single run. Each target is specified as `ip:port`:
+Use `-T` / `--targets` to scan multiple hosts from a file. The file should contain one target per line in `http://ip:port` or `https://ip:port` format. Lines starting with `#` are treated as comments.
 
-```bash
-# Scan three Prometheus instances
-python3 firethief.py -T 10.0.0.1:9090 10.0.0.2:9090 10.0.0.3:9090
-
-# Mix with other options
-python3 firethief.py -T 192.168.1.100:9090 172.16.0.50:80 -v --save-profiles -t 15
-
-# IPv6 targets use bracket notation
-python3 firethief.py -T [::1]:9090 192.168.1.1:9090
+**Example targets file** (`targets.txt`):
+```
+# Prometheus instances
+http://192.168.1.100:9090
+http://10.0.0.50:9090
+https://prometheus.internal.com:443
+http://172.16.0.1:80
 ```
 
-Targets are scanned sequentially, with each target getting its own full three-phase scan and report. The web UI (`--web-ui`) operates on a single target.
+```bash
+# Scan all targets in the file
+python3 firethief.py -T targets.txt
+
+# With web UI — includes a target selector bar for switching between targets
+python3 firethief.py -T targets.txt --web-ui
+
+# Mix with other options
+python3 firethief.py -T targets.txt -v --save-profiles -t 15
+```
+
+Targets are scanned sequentially. In CLI mode, each target gets its own report. In web UI mode, a target navigation bar lets you switch between targets and shows live scan status for each.
 
 ## 🔎 What It Detects
 
@@ -203,6 +212,7 @@ FireThief includes a real-time web interface with:
 - **Live Progress Tracking** - See scan phases and current actions
 - **Dynamic Statistics** - Critical/High/Medium/Low findings counter
 - **Collapsible Sections** - All sections start collapsed with result counts in the headline (e.g., "Critical Findings (3)"). Click to expand. Sections you unfold remain open across live data refreshes while the scan is still running.
+- **Multi-Target Support** - When scanning multiple targets, a target navigation bar shows all targets with live status indicators. Click to switch between targets.
 - **Severity Color Coding** - Red (Critical), Orange (High), Yellow (Medium), Blue (Low)
 - **Dark Cyberpunk Theme** - Inspired by professional security tools
 
