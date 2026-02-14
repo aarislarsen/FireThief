@@ -29,6 +29,7 @@ from flask_cors import CORS
 import threading
 import webbrowser
 import time
+import logging
 
 requests.packages.urllib3.disable_warnings()
 
@@ -49,6 +50,82 @@ BANNER = """
 """
 
 class PrometheusScanner:
+    # Data-driven credential detection: (pattern_key, type_name, match_group, truncate_len, severity)
+    CREDENTIAL_RULES = [
+        # Cloud providers
+        ('aws_key',              'AWS_ACCESS_KEY_ID',              1,    None, 'CRITICAL'),
+        ('aws_secret',           'AWS_SECRET_ACCESS_KEY',          2,    20,   'CRITICAL'),
+        ('aws_session',          'AWS_SESSION_TOKEN',              2,    30,   'CRITICAL'),
+        ('azure_client_secret',  'AZURE_CLIENT_SECRET',            2,    20,   'CRITICAL'),
+        ('azure_storage',        'AZURE_STORAGE_CONNECTION_STRING', 0,   50,   'CRITICAL'),
+        ('gcp_api_key',          'GCP_API_KEY',                    0,    None, 'CRITICAL'),
+        # Version control
+        ('github_pat',           'GITHUB_PERSONAL_ACCESS_TOKEN',   0,    None, 'CRITICAL'),
+        ('github_oauth',         'GITHUB_OAUTH_TOKEN',             0,    None, 'CRITICAL'),
+        ('github_app',           'GITHUB_APP_TOKEN',               0,    None, 'CRITICAL'),
+        ('github_fine_grained',  'GITHUB_FINE_GRAINED_PAT',        0,    50,   'CRITICAL'),
+        ('github_refresh',       'GITHUB_REFRESH_TOKEN',           0,    None, 'CRITICAL'),
+        ('gitlab_pat',           'GITLAB_PERSONAL_ACCESS_TOKEN',   0,    None, 'CRITICAL'),
+        ('gitlab_runner',        'GITLAB_RUNNER_TOKEN',            0,    None, 'CRITICAL'),
+        # Package managers
+        ('npm_token',            'NPM_ACCESS_TOKEN',               0,    None, 'CRITICAL'),
+        ('pypi_token',           'PYPI_API_TOKEN',                 0,    50,   'CRITICAL'),
+        # Communication
+        ('slack_bot_token',      'SLACK_BOT_TOKEN',                0,    None, 'CRITICAL'),
+        ('slack_user_token',     'SLACK_USER_TOKEN',               0,    None, 'CRITICAL'),
+        ('slack_workspace',      'SLACK_WORKSPACE_TOKEN',          0,    None, 'CRITICAL'),
+        ('slack_webhook',        'SLACK_WEBHOOK_URL',              0,    None, 'HIGH'),
+        ('discord_webhook',      'DISCORD_WEBHOOK_URL',            0,    None, 'MEDIUM'),
+        # Payment
+        ('stripe_live_secret',   'STRIPE_LIVE_SECRET_KEY',         0,    30,   'CRITICAL'),
+        ('stripe_test_secret',   'STRIPE_TEST_SECRET_KEY',         0,    30,   'HIGH'),
+        ('stripe_live_pub',      'STRIPE_LIVE_PUBLISHABLE_KEY',    0,    30,   'HIGH'),
+        ('stripe_restricted',    'STRIPE_RESTRICTED_KEY',          0,    30,   'CRITICAL'),
+        ('square_access',        'SQUARE_ACCESS_TOKEN',            0,    None, 'CRITICAL'),
+        ('square_oauth',         'SQUARE_OAUTH_SECRET',            0,    None, 'CRITICAL'),
+        # SaaS APIs
+        ('twilio_account_sid',   'TWILIO_ACCOUNT_SID',             0,    None, 'HIGH'),
+        ('twilio_api_key',       'TWILIO_API_KEY',                 0,    None, 'CRITICAL'),
+        ('sendgrid_api',         'SENDGRID_API_KEY',               0,    30,   'CRITICAL'),
+        ('digitalocean_pat',     'DIGITALOCEAN_PERSONAL_ACCESS_TOKEN', 0, 30, 'CRITICAL'),
+        ('digitalocean_oauth',   'DIGITALOCEAN_OAUTH_TOKEN',       0,    30,   'CRITICAL'),
+        ('digitalocean_refresh', 'DIGITALOCEAN_REFRESH_TOKEN',     0,    30,   'CRITICAL'),
+        ('shopify_token',        'SHOPIFY_ACCESS_TOKEN',           0,    None, 'CRITICAL'),
+        ('shopify_shared',       'SHOPIFY_SHARED_SECRET',          0,    None, 'CRITICAL'),
+        ('shopify_custom',       'SHOPIFY_CUSTOM_APP_TOKEN',       0,    None, 'CRITICAL'),
+        ('shopify_private',      'SHOPIFY_PRIVATE_APP_TOKEN',      0,    None, 'CRITICAL'),
+        ('mailgun_api',          'MAILGUN_API_KEY',                0,    None, 'CRITICAL'),
+        ('mailgun_signing',      'MAILGUN_SIGNING_KEY',            0,    None, 'CRITICAL'),
+        ('heroku_api',           'HEROKU_API_KEY',                 0,    None, 'HIGH'),
+        ('atlassian_api',        'ATLASSIAN_API_TOKEN',            1,    None, 'CRITICAL'),
+        ('datadog_api',          'DATADOG_API_KEY',                0,    None, 'CRITICAL'),
+        ('datadog_app',          'DATADOG_APP_KEY',                0,    None, 'CRITICAL'),
+        ('newrelic_api',         'NEWRELIC_API_KEY',               0,    None, 'CRITICAL'),
+        ('newrelic_insights',    'NEWRELIC_INSIGHTS_KEY',          0,    None, 'CRITICAL'),
+        ('pagerduty_api',        'PAGERDUTY_API_KEY',              0,    None, 'HIGH'),
+        ('grafana_key',          'GRAFANA_API_KEY',                0,    None, 'HIGH'),
+        ('grafana_service_account', 'GRAFANA_SERVICE_ACCOUNT_TOKEN', 0, None, 'HIGH'),
+        ('generic_api_key',      'GENERIC_API_KEY',                1,    30,   'MEDIUM'),
+        # Databases
+        ('db_uri',               'DATABASE_URI',                   0,    None, 'CRITICAL'),
+        ('jdbc_with_creds',      'JDBC_URL_WITH_CREDENTIALS',      0,    None, 'CRITICAL'),
+        ('jdbc_url',             'JDBC_URL',                       0,    None, 'HIGH'),
+        ('odbc_connection',      'ODBC_CONNECTION_STRING',         0,    100,  'CRITICAL'),
+        ('odbc_dsn',             'ODBC_DSN_CONNECTION',            0,    100,  'CRITICAL'),
+        ('sqlalchemy_url',       'SQLALCHEMY_URL',                 0,    None, 'CRITICAL'),
+        ('mongodb_atlas',        'MONGODB_ATLAS_CONNECTION',       0,    None, 'CRITICAL'),
+        ('mongodb_srv',          'MONGODB_SRV_CONNECTION',         0,    None, 'CRITICAL'),
+        ('connection_string',    'CONNECTION_STRING_WITH_CREDENTIALS', 0, None, 'CRITICAL'),
+        # Auth tokens
+        ('jwt',                  'JWT_TOKEN',                      0,    100,  'HIGH'),
+        ('bearer_token',         'BEARER_TOKEN',                   1,    50,   'HIGH'),
+        ('basic_auth_url',       'BASIC_AUTH_URL',                 0,    None, 'CRITICAL'),
+        # Webhooks
+        ('webhook',              'WEBHOOK_URL',                    0,    None, 'MEDIUM'),
+        # Infrastructure
+        ('pgp_private_key',      'PGP_PRIVATE_KEY',               0,    None, 'CRITICAL'),
+    ]
+
     def __init__(self, host: str, port: int, timeout: int = 10, verbose: bool = False,
                  save_profiles: bool = False, output_dir: str = None, scheme: str = 'http'):
         self.host = host
@@ -82,9 +159,24 @@ class PrometheusScanner:
             'config_exposure': [],
             'scrape_targets': [],
             'discovered_endpoints': [],
-            'accessible_endpoints': []
+            'accessible_endpoints': [],
+            'infrastructure': {
+                'deployment_type': None,
+                'deployment_signals': [],
+                'prometheus_version': None,
+                'storage_retention': None,
+                'resource_limits': {},
+                'colocation': [],
+                'operator': None,
+                'operator_signals': [],
+                'ha_setup': None,
+                'ha_signals': [],
+                'node_info': {},
+            }
         }
-        
+
+        self._infra_raw = {}
+
         self.endpoints = self._get_discovery_endpoints()
         self.patterns = self._compile_patterns()
         
@@ -346,7 +438,7 @@ class PrometheusScanner:
             if self.verbose:
                 print(f"[*] Downloading profile: {url}")
             
-            resp = requests.get(url, timeout=30, verify=False, allow_redirects=True)
+            resp = self._http_get(url, timeout=30)
             
             if resp.status_code == 200:
                 content = resp.content
@@ -580,14 +672,12 @@ class PrometheusScanner:
                 r'etc/rancher|var/lib/rancher)[^\s"\'<>\]]*'
             ),
             'cert_files': re.compile(r'[^\s"\'<>\]]*\.(?:pem|key|crt|cer|p12|pfx|jks|keystore)'),
-            'email': re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
             'private_ip': re.compile(
                 r'\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|'
                 r'172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|'
                 r'192\.168\.\d{1,3}\.\d{1,3})\b'
             ),
             'route_handler': re.compile(r'(?:Handler|handleFunc|ServeHTTP|http\.).*?([/][a-z0-9/_\-{}]+)'),
-            'http_route': re.compile(r'(?:GET|POST|PUT|DELETE|PATCH)\s+([/][a-z0-9/_\-{}:]+)'),
             'webhook': re.compile(
                 r'https?://(?:hooks\.slack\.com|discord\.com/api/webhooks|'
                 r'outlook\.office\.com/webhook|api\.telegram\.org/bot)[^\s"\'<>\]]+',
@@ -597,19 +687,23 @@ class PrometheusScanner:
             'env_var_secret': re.compile(r'(?:export\s+)?([A-Z_]+(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL))=([^\s]+)'),
         }
     
+    def _http_get(self, url: str, timeout: int = None) -> requests.Response:
+        return requests.get(url, timeout=timeout or self.timeout,
+                            verify=False, allow_redirects=True)
+
     def scan_endpoint(self, endpoint: str) -> Tuple[bool, bytes, str, dict]:
         url = urljoin(self.base_url, endpoint)
         try:
             if self.verbose:
                 print(f"[*] Scanning: {url}")
-            resp = requests.get(url, timeout=self.timeout, verify=False, allow_redirects=True)
-            
+            resp = self._http_get(url)
+
             if resp.status_code == 200:
                 content_type = resp.headers.get('Content-Type', '')
                 return True, resp.content, content_type, dict(resp.headers)
-            
+
             return False, b'', '', {}
-        
+
         except requests.exceptions.RequestException as e:
             if self.verbose:
                 print(f"[-] Error accessing {url}: {e}")
@@ -693,11 +787,11 @@ class PrometheusScanner:
             text = content.decode('utf-8', errors='ignore')
         except:
             text = str(content)
-        
+
         content_type = "heap/stack" if "pprof" in endpoint else "endpoint"
         if self.verbose:
             print(f"[*] Analyzing {content_type} content from {endpoint} ({len(text)} chars)")
-        
+
         for match in self.patterns['secret_keywords'].finditer(text):
             self.findings['secrets'].append({
                 'type': 'keyword_secret',
@@ -706,341 +800,55 @@ class PrometheusScanner:
                 'endpoint': endpoint,
                 'severity': 'HIGH'
             })
-        
-        for match in self.patterns['aws_key'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'AWS_ACCESS_KEY_ID',
-                'value': match.group(1),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['aws_secret'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'AWS_SECRET_ACCESS_KEY',
-                'value': match.group(2)[:20] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['aws_session'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'AWS_SESSION_TOKEN',
-                'value': match.group(2)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['azure_client_secret'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'AZURE_CLIENT_SECRET',
-                'value': match.group(2)[:20] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['azure_storage'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'AZURE_STORAGE_CONNECTION_STRING',
-                'value': match.group(0)[:50] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['gcp_api_key'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GCP_API_KEY',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['github_pat'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITHUB_PERSONAL_ACCESS_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['github_oauth'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITHUB_OAUTH_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['github_app'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITHUB_APP_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['github_fine_grained'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITHUB_FINE_GRAINED_PAT',
-                'value': match.group(0)[:50] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['gitlab_pat'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITLAB_PERSONAL_ACCESS_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['gitlab_runner'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GITLAB_RUNNER_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['npm_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'NPM_ACCESS_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['pypi_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'PYPI_API_TOKEN',
-                'value': match.group(0)[:50] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['slack_bot_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SLACK_BOT_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['slack_user_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SLACK_USER_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['slack_webhook'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SLACK_WEBHOOK_URL',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
-        for match in self.patterns['stripe_live_secret'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'STRIPE_LIVE_SECRET_KEY',
-                'value': match.group(0)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['stripe_live_pub'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'STRIPE_LIVE_PUBLISHABLE_KEY',
-                'value': match.group(0)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
-        for match in self.patterns['square_access'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SQUARE_ACCESS_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['twilio_account_sid'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'TWILIO_ACCOUNT_SID',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
-        for match in self.patterns['twilio_api_key'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'TWILIO_API_KEY',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['sendgrid_api'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SENDGRID_API_KEY',
-                'value': match.group(0)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['digitalocean_pat'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'DIGITALOCEAN_PERSONAL_ACCESS_TOKEN',
-                'value': match.group(0)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['shopify_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SHOPIFY_ACCESS_TOKEN',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
+
+        # Data-driven credential detection
+        for pattern_key, cred_type, group_idx, truncate, severity in self.CREDENTIAL_RULES:
+            if pattern_key not in self.patterns:
+                continue
+            for match in self.patterns[pattern_key].finditer(text):
+                val = match.group(group_idx)
+                if truncate:
+                    val = val[:truncate] + '...'
+                self.findings['credentials'].append({
+                    'type': cred_type, 'value': val,
+                    'endpoint': endpoint, 'severity': severity
+                })
+
+        # Special cases with extra fields or dedup logic
         for match in self.patterns['ssh_private_key_full'].finditer(text):
             self.findings['credentials'].append({
-                'type': 'SSH_PRIVATE_KEY',
-                'value': 'FULL PRIVATE KEY DETECTED',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL',
+                'type': 'SSH_PRIVATE_KEY', 'value': 'FULL PRIVATE KEY DETECTED',
+                'endpoint': endpoint, 'severity': 'CRITICAL',
                 'note': 'Complete SSH private key found in content'
             })
-        
+
         for match in self.patterns['ssh_private_key'].finditer(text):
-            if not any(c.get('type') == 'SSH_PRIVATE_KEY' and c.get('endpoint') == endpoint 
+            if not any(c.get('type') == 'SSH_PRIVATE_KEY' and c.get('endpoint') == endpoint
                       for c in self.findings['credentials']):
                 self.findings['credentials'].append({
-                    'type': 'SSH_PRIVATE_KEY_HEADER',
-                    'value': 'SSH PRIVATE KEY DETECTED',
-                    'endpoint': endpoint,
-                    'severity': 'CRITICAL'
+                    'type': 'SSH_PRIVATE_KEY_HEADER', 'value': 'SSH PRIVATE KEY DETECTED',
+                    'endpoint': endpoint, 'severity': 'CRITICAL'
                 })
-        
-        for match in self.patterns['db_uri'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'DATABASE_URI',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['jdbc_with_creds'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'JDBC_URL_WITH_CREDENTIALS',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['odbc_connection'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'ODBC_CONNECTION_STRING',
-                'value': match.group(0)[:100] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['mongodb_atlas'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'MONGODB_ATLAS_CONNECTION',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['connection_string'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'CONNECTION_STRING_WITH_CREDENTIALS',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['jwt'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'JWT_TOKEN',
-                'value': match.group(0)[:100] + '...',
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
-        for match in self.patterns['bearer_token'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'BEARER_TOKEN',
-                'value': match.group(1)[:50] + '...',
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
+
         for match in self.patterns['api_token_header'].finditer(text):
             self.findings['credentials'].append({
-                'type': 'API_TOKEN_HEADER',
-                'header': match.group(1),
-                'value': match.group(2)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'HIGH'
+                'type': 'API_TOKEN_HEADER', 'header': match.group(1),
+                'value': match.group(2)[:30] + '...', 'endpoint': endpoint, 'severity': 'HIGH'
             })
-        
-        for match in self.patterns['basic_auth_url'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'BASIC_AUTH_URL',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'CRITICAL'
-            })
-        
-        for match in self.patterns['webhook'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'WEBHOOK_URL',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'MEDIUM'
-            })
-        
-        for match in self.patterns['discord_webhook'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'DISCORD_WEBHOOK_URL',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'MEDIUM'
-            })
-        
-        for match in self.patterns['grafana_key'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'GRAFANA_API_KEY',
-                'value': match.group(0),
-                'endpoint': endpoint,
-                'severity': 'HIGH'
-            })
-        
+
         for match in self.patterns['k8s_sa_token'].finditer(text):
             self.findings['credentials'].append({
-                'type': 'K8S_SERVICE_ACCOUNT_TOKEN',
-                'value': match.group(1)[:30] + '...',
-                'endpoint': endpoint,
-                'severity': 'CRITICAL',
+                'type': 'K8S_SERVICE_ACCOUNT_TOKEN', 'value': match.group(1)[:30] + '...',
+                'endpoint': endpoint, 'severity': 'CRITICAL',
                 'note': 'K8s SA token - can be used for cluster access'
             })
-        
+
         for match in self.patterns['env_var_secret'].finditer(text):
             self.findings['credentials'].append({
-                'type': 'ENVIRONMENT_VARIABLE_SECRET',
-                'variable': match.group(1),
-                'value': match.group(2)[:50] + '...',
-                'endpoint': endpoint,
-                'severity': 'HIGH'
+                'type': 'ENVIRONMENT_VARIABLE_SECRET', 'variable': match.group(1),
+                'value': match.group(2)[:50] + '...', 'endpoint': endpoint, 'severity': 'HIGH'
             })
-        
+
         seen_fqdns = set()
         for match in self.patterns['fqdn'].finditer(text):
             fqdn = match.group(0).lower()
@@ -1131,6 +939,266 @@ class PrometheusScanner:
                 'severity': 'MEDIUM'
             })
     
+    def _format_bytes(self, nbytes):
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if abs(nbytes) < 1024.0:
+                return f"{nbytes:.1f} {unit}"
+            nbytes /= 1024.0
+        return f"{nbytes:.1f} PB"
+
+    def _get_infra_json(self, endpoint_key):
+        for ep, content in self._infra_raw.items():
+            if endpoint_key in ep:
+                try:
+                    data = json.loads(content.decode('utf-8', errors='ignore'))
+                    return data.get('data', data)
+                except:
+                    pass
+        return None
+
+    def _get_infra_text(self, endpoint_key):
+        for ep, content in self._infra_raw.items():
+            if endpoint_key in ep:
+                return content.decode('utf-8', errors='ignore')
+        return None
+
+    def analyze_infrastructure(self):
+        infra = self.findings['infrastructure']
+        self._analyze_build_and_runtime(infra)
+        self._analyze_resources(infra)
+        self._analyze_deployment_type(infra)
+        self._analyze_colocation(infra)
+        self._analyze_operator(infra)
+        self._analyze_ha_setup(infra)
+
+        if infra['deployment_type']:
+            print(f"[+] Deployment type: {infra['deployment_type']} ({len(infra['deployment_signals'])} signals)")
+        if infra['prometheus_version']:
+            print(f"[+] Prometheus version: {infra['prometheus_version']}")
+        if infra['ha_setup']:
+            print(f"[+] HA setup detected: {infra['ha_setup']}")
+        if infra['operator']:
+            print(f"[+] Operator: {infra['operator']}")
+        if infra['resource_limits']:
+            print(f"[+] Resource metrics collected: {len(infra['resource_limits'])} metrics")
+        if infra['colocation']:
+            print(f"[+] Co-located services: {len(infra['colocation'])}")
+
+    def _analyze_build_and_runtime(self, infra):
+        build = self._get_infra_json('buildinfo')
+        if build:
+            infra['prometheus_version'] = build.get('version', None)
+            infra['node_info']['goVersion'] = build.get('goVersion', None)
+            infra['node_info']['GOOS'] = build.get('goOS', build.get('GOOS', None))
+            infra['node_info']['GOARCH'] = build.get('goArch', build.get('GOARCH', None))
+
+        runtime = self._get_infra_json('runtimeinfo')
+        if runtime:
+            infra['node_info']['GOMAXPROCS'] = runtime.get('GOMAXPROCS', None)
+            infra['node_info']['goroutineCount'] = runtime.get('goroutineCount', None)
+            infra['node_info']['CWD'] = runtime.get('CWD', None)
+            infra['storage_retention'] = runtime.get('storageRetention', None)
+
+    def _analyze_deployment_type(self, infra):
+        k8s_score = 0
+        vm_score = 0
+
+        cwd = infra['node_info'].get('CWD', '')
+        if cwd:
+            if '/prometheus' in cwd or '/var/run' in cwd:
+                k8s_score += 1
+                infra['deployment_signals'].append(f"CWD suggests container: {cwd}")
+            elif cwd.startswith(('/opt/', '/usr/local/', '/home/')):
+                vm_score += 1
+                infra['deployment_signals'].append(f"CWD suggests VM/bare metal: {cwd}")
+
+        for f in self.findings['fqdns']:
+            if '.svc.cluster.local' in f.get('value', ''):
+                k8s_score += 2
+                infra['deployment_signals'].append(f"K8s service FQDN: {f['value']}")
+                break
+
+        for t in self.findings['scrape_targets']:
+            labels = t if isinstance(t, dict) else {}
+            if labels.get('job', ''):
+                job = labels['job']
+                if any(kw in job.lower() for kw in ['kube', 'k8s', 'kubernetes', 'node-exporter']):
+                    k8s_score += 1
+                    infra['deployment_signals'].append(f"K8s-style scrape job: {job}")
+                    break
+
+        for item in self.findings['k8s']:
+            if item.get('type') in ('namespace', 'pod', 'service', 'deployment'):
+                k8s_score += 1
+                infra['deployment_signals'].append(f"K8s metadata found: {item['type']}")
+                break
+
+        if self.findings['containers']:
+            registries = [c for c in self.findings['containers'] if c.get('type') == 'registry']
+            if registries:
+                k8s_score += 1
+                infra['deployment_signals'].append(f"Container registries detected: {len(registries)}")
+
+        all_text = ' '.join(self._get_infra_text(ep) or '' for ep in
+                            ['config', 'flags', 'runtimeinfo'])
+        if '/var/run/secrets/kubernetes.io' in all_text:
+            k8s_score += 2
+            infra['deployment_signals'].append("K8s service account secrets path detected")
+        if '/etc/systemd/' in all_text or 'systemd' in all_text.lower():
+            vm_score += 1
+            infra['deployment_signals'].append("systemd references detected")
+
+        flags = self._get_infra_json('flags')
+        if flags:
+            config_file = flags.get('config.file', '')
+            if '/etc/prometheus/' in config_file:
+                if 'config_out' in config_file:
+                    k8s_score += 1
+                    infra['deployment_signals'].append(f"Operator-style config path: {config_file}")
+                else:
+                    vm_score += 1
+                    infra['deployment_signals'].append(f"Traditional config path: {config_file}")
+
+        if k8s_score > vm_score:
+            infra['deployment_type'] = 'kubernetes'
+        elif vm_score > k8s_score:
+            infra['deployment_type'] = 'vm'
+        else:
+            infra['deployment_type'] = 'unknown'
+
+    def _analyze_resources(self, infra):
+        runtime = self._get_infra_json('runtimeinfo')
+        if runtime:
+            if runtime.get('GOMAXPROCS'):
+                infra['resource_limits']['cpu_cores'] = runtime['GOMAXPROCS']
+            if runtime.get('goroutineCount'):
+                infra['resource_limits']['goroutines'] = runtime['goroutineCount']
+
+        metrics_text = self._get_infra_text('metrics')
+        if not metrics_text:
+            return
+
+        metric_patterns = {
+            'resident_memory': r'process_resident_memory_bytes\s+([\d.e+]+)',
+            'open_fds': r'process_open_fds\s+([\d.e+]+)',
+            'max_fds': r'process_max_fds\s+([\d.e+]+)',
+            'cpu_seconds': r'process_cpu_seconds_total\s+([\d.e+]+)',
+            'go_alloc_bytes': r'go_memstats_alloc_bytes\{[^}]*\}\s+([\d.e+]+)|go_memstats_alloc_bytes\s+([\d.e+]+)',
+            'tsdb_head_series': r'prometheus_tsdb_head_series\s+([\d.e+]+)',
+        }
+
+        for key, pattern in metric_patterns.items():
+            match = re.search(pattern, metrics_text)
+            if match:
+                val_str = match.group(1) or (match.group(2) if match.lastindex >= 2 else None)
+                if val_str:
+                    val = float(val_str)
+                    if key == 'resident_memory':
+                        infra['resource_limits']['memory_bytes'] = int(val)
+                        infra['resource_limits']['memory_human'] = self._format_bytes(val)
+                    elif key == 'open_fds':
+                        infra['resource_limits']['open_fds'] = int(val)
+                    elif key == 'max_fds':
+                        infra['resource_limits']['max_fds'] = int(val)
+                    elif key == 'cpu_seconds':
+                        infra['resource_limits']['cpu_seconds_total'] = round(val, 2)
+                    elif key == 'go_alloc_bytes':
+                        infra['resource_limits']['go_alloc_human'] = self._format_bytes(val)
+                    elif key == 'tsdb_head_series':
+                        infra['resource_limits']['tsdb_head_series'] = int(val)
+
+    def _analyze_colocation(self, infra):
+        for t in self.findings['scrape_targets']:
+            scrape_url = t.get('scrape_url', '')
+            if not scrape_url:
+                continue
+            try:
+                parsed = urlparse(scrape_url)
+                target_host = parsed.hostname
+                if target_host and (target_host == self.host or
+                                    target_host == 'localhost' or
+                                    target_host == '127.0.0.1' or
+                                    target_host == '::1'):
+                    job = t.get('job', 'unknown')
+                    if job != 'prometheus' and not any(c['job'] == job for c in infra['colocation']):
+                        infra['colocation'].append({
+                            'job': job,
+                            'scrape_url': scrape_url,
+                            'health': t.get('health', 'unknown')
+                        })
+            except:
+                pass
+
+    def _analyze_operator(self, infra):
+        config_text = self._get_infra_text('config') or ''
+        flags = self._get_infra_json('flags') or {}
+
+        if 'serviceMonitor' in config_text or 'podMonitor' in config_text or 'probe' in config_text:
+            infra['operator'] = 'prometheus-operator'
+            infra['operator_signals'].append("serviceMonitor/podMonitor references in config")
+
+        config_file = flags.get('config.file', '')
+        if 'config_out' in config_file or 'prometheus-config-reloader' in config_text:
+            infra['operator'] = 'prometheus-operator'
+            infra['operator_signals'].append(f"Operator config path: {config_file}")
+
+        for t in self.findings['scrape_targets']:
+            job = t.get('job', '')
+            if 'prometheus-operator' in job.lower() or 'kube-prometheus' in job.lower():
+                infra['operator'] = 'prometheus-operator'
+                infra['operator_signals'].append(f"Operator scrape job: {job}")
+                break
+
+        all_text = config_text + ' '.join(str(v) for v in flags.values())
+        if 'helm.sh/chart' in all_text or 'app.kubernetes.io/managed-by' in all_text:
+            if not infra['operator']:
+                infra['operator'] = 'helm'
+            infra['operator_signals'].append("Helm-managed deployment detected")
+
+    def _analyze_ha_setup(self, infra):
+        flags = self._get_infra_json('flags') or {}
+        config_text = self._get_infra_text('config') or ''
+        metrics_text = self._get_infra_text('metrics') or ''
+
+        min_block = flags.get('storage.tsdb.min-block-duration', '')
+        max_block = flags.get('storage.tsdb.max-block-duration', '')
+        if min_block and max_block and min_block == max_block:
+            infra['ha_setup'] = 'thanos-sidecar'
+            infra['ha_signals'].append(f"min-block-duration == max-block-duration ({min_block})")
+
+        if 'thanos_' in metrics_text or 'thanos' in config_text.lower():
+            if not infra['ha_setup']:
+                infra['ha_setup'] = 'thanos'
+            infra['ha_signals'].append("Thanos metrics/config references detected")
+
+        for t in self.findings['scrape_targets']:
+            job = t.get('job', '').lower()
+            if 'thanos' in job:
+                if not infra['ha_setup']:
+                    infra['ha_setup'] = 'thanos'
+                infra['ha_signals'].append(f"Thanos scrape job: {t['job']}")
+                break
+
+        if 'cortex' in config_text.lower():
+            infra['ha_setup'] = 'cortex'
+            infra['ha_signals'].append("Cortex references in config")
+        if 'mimir' in config_text.lower():
+            infra['ha_setup'] = 'mimir'
+            infra['ha_signals'].append("Mimir references in config")
+
+        if 'remote_write' in config_text:
+            for name in ['cortex', 'mimir', 'thanos']:
+                if name in config_text.lower():
+                    if not infra['ha_setup']:
+                        infra['ha_setup'] = name
+                    infra['ha_signals'].append(f"remote_write to {name} endpoint")
+
+        if '/federate' in self.findings['accessible_endpoints']:
+            if 'honor_labels' in config_text:
+                if not infra['ha_setup']:
+                    infra['ha_setup'] = 'federation'
+                infra['ha_signals'].append("Federation endpoint accessible with honor_labels config")
+
     def run(self):
         print(BANNER)
         print(f"[+] Target: {self.base_url}")
@@ -1182,7 +1250,19 @@ class PrometheusScanner:
                 
                 print(f"[*] Running secret detection on {endpoint}...")
                 self.analyze_content(content, endpoint)
-        
+
+                infra_endpoints = {'/api/v1/status/runtimeinfo', '/api/v1/status/buildinfo',
+                                   '/api/v1/status/flags', '/api/v1/status/config',
+                                   '/api/v1/targets', '/metrics'}
+                ep_base = endpoint.split('?')[0]
+                if endpoint in infra_endpoints or ep_base in {e.split('?')[0] for e in infra_endpoints}:
+                    self._infra_raw[endpoint] = content
+
+        self.update_status("scanning", "Analyzing infrastructure...", 79)
+        print("\n[*] INFRASTRUCTURE ANALYSIS")
+        print("="*80)
+        self.analyze_infrastructure()
+
         if pprof_profiles:
             self.update_status("pprof", "Starting deep pprof analysis...", 80)
             print(f"\n[*] PHASE 3: DEEP PPROF ANALYSIS")
@@ -1226,7 +1306,76 @@ class PrometheusScanner:
         print(f"  K8s Metadata: {len(self.findings['k8s'])}")
         print(f"  FQDNs: {len(set(f['value'] for f in self.findings['fqdns']))}")
         print("="*80)
-    
+
+        self._print_infra_summary()
+
+    def _print_infra_summary(self):
+        infra = self.findings['infrastructure']
+        has_data = (infra['deployment_type'] or infra['prometheus_version'] or
+                    infra['resource_limits'] or infra['ha_setup'] or infra['operator'])
+        if not has_data:
+            return
+
+        print("\n" + "="*80)
+        print("INFRASTRUCTURE ANALYSIS:")
+        print("="*80)
+
+        if infra['deployment_type']:
+            sig_count = len(infra['deployment_signals'])
+            print(f"\n  Deployment: {infra['deployment_type'].upper()} ({sig_count} signal{'s' if sig_count != 1 else ''})")
+            for s in infra['deployment_signals']:
+                print(f"    - {s}")
+
+        if infra['prometheus_version']:
+            go_ver = infra['node_info'].get('goVersion', '')
+            goos = infra['node_info'].get('GOOS', '')
+            goarch = infra['node_info'].get('GOARCH', '')
+            parts = [f"v{infra['prometheus_version']}" if not infra['prometheus_version'].startswith('v') else infra['prometheus_version']]
+            if go_ver:
+                parts.append(f"Go {go_ver}")
+            if goos and goarch:
+                parts.append(f"{goos}/{goarch}")
+            print(f"\n  Prometheus: {', '.join(parts)}")
+
+        if infra['storage_retention']:
+            print(f"  Storage Retention: {infra['storage_retention']}")
+
+        if infra['resource_limits']:
+            rl = infra['resource_limits']
+            print("\n  Resources:")
+            if 'cpu_cores' in rl:
+                print(f"    CPU Cores (GOMAXPROCS): {rl['cpu_cores']}")
+            if 'memory_human' in rl:
+                print(f"    Memory (resident): {rl['memory_human']}")
+            if 'goroutines' in rl:
+                print(f"    Goroutines: {rl['goroutines']:,}")
+            if 'open_fds' in rl:
+                max_fds = rl.get('max_fds', '')
+                fds_str = f"{rl['open_fds']:,}"
+                if max_fds:
+                    fds_str += f"/{max_fds:,}"
+                print(f"    Open FDs: {fds_str}")
+            if 'tsdb_head_series' in rl:
+                print(f"    TSDB Head Series: {rl['tsdb_head_series']:,}")
+            if 'go_alloc_human' in rl:
+                print(f"    Go Heap Alloc: {rl['go_alloc_human']}")
+
+        if infra['colocation']:
+            jobs = ', '.join(c['job'] for c in infra['colocation'])
+            print(f"\n  Co-located Services: {jobs}")
+
+        if infra['operator']:
+            print(f"\n  Operator: {infra['operator']}")
+            for s in infra['operator_signals']:
+                print(f"    - {s}")
+
+        if infra['ha_setup']:
+            print(f"\n  HA Setup: {infra['ha_setup']}")
+            for s in infra['ha_signals']:
+                print(f"    - {s}")
+
+        print("="*80)
+
     def get_summary_stats(self) -> dict:
         return {
             'critical': len([c for c in self.findings['credentials'] if c.get('severity') == 'CRITICAL']),
@@ -1715,6 +1864,10 @@ HTML_TEMPLATE = """
                 <div class="stat-number" style="color: #64ffda;" id="stat-endpoints">0</div>
                 <div class="stat-label">Accessible Endpoints</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color: #48dbfb;" id="stat-infra">-</div>
+                <div class="stat-label">Deployment</div>
+            </div>
         </div>
 
         <div id="findings-container"></div>
@@ -1805,6 +1958,10 @@ HTML_TEMPLATE = """
                     document.getElementById('stat-dos').textContent = data.stats.dos_vectors;
                     document.getElementById('stat-endpoints').textContent = data.stats.accessible_endpoints;
 
+                    const infra = data.findings.infrastructure || {};
+                    const infraLabel = infra.deployment_type ? infra.deployment_type.toUpperCase() : '-';
+                    document.getElementById('stat-infra').textContent = infraLabel === 'KUBERNETES' ? 'K8s' : infraLabel;
+
                     const progress = data.status.progress;
                     document.getElementById('progress-bar').style.width = progress + '%';
                     document.getElementById('progress-percent').textContent = progress + '%';
@@ -1839,6 +1996,7 @@ HTML_TEMPLATE = """
         function renderFindings(findings) {
             const container = document.getElementById('findings-container');
             container.innerHTML = `
+                ${renderInfrastructure(findings.infrastructure)}
                 ${renderCriticalFindings(findings.critical_findings)}
                 ${renderHighFindings(findings.high_findings)}
                 ${renderDosVectors(findings.dos_vectors)}
@@ -1851,295 +2009,199 @@ HTML_TEMPLATE = """
             `;
         }
 
-        function renderCriticalFindings(findings) {
-            const count = countLabel(findings);
-            const sid = 'critical';
+        function renderSection(sid, icon, title, badgeClass, badgeText, innerHtml, emptyMsg) {
+            const count = innerHtml ? 'results' : '0';
             return `
                 <div class="findings-section">
                     <div class="section-header">
                         <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🚨 Critical Findings (${count})
+                            ${icon} ${title}
                         </h2>
-                        <span class="severity-badge severity-critical">CRITICAL</span>
+                        <span class="severity-badge ${badgeClass}">${badgeText}</span>
                     </div>
                     <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${findings && findings.length > 0 ? findings.map(f => `
-                            <div class="finding-item critical">
-                                <div class="finding-type">${f.type}</div>
-                                <div class="finding-value">${f.value}</div>
-                                <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
-                                ${f.note ? `<div class="finding-note">⚠️ ${f.note}</div>` : ''}
-                            </div>
-                        `).join('') : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No critical credential exposures detected</p>
-                            </div>
-                        `}
+                        ${innerHtml || `<div class="empty-state"><div class="empty-state-icon">✓</div><p>${emptyMsg}</p></div>`}
                     </div>
                 </div>
             `;
+        }
+
+        function renderCriticalFindings(findings) {
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item critical">
+                    <div class="finding-type">${f.type}</div>
+                    <div class="finding-value">${f.value}</div>
+                    <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
+                    ${f.note ? `<div class="finding-note">⚠️ ${f.note}</div>` : ''}
+                </div>
+            `).join('') : '';
+            return renderSection('critical', '🚨', `Critical Findings (${countLabel(findings)})`,
+                'severity-critical', 'CRITICAL', inner, 'No critical credential exposures detected');
         }
 
         function renderHighFindings(findings) {
-            const count = countLabel(findings);
-            const sid = 'high';
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🔐 Secrets & Tokens (${count})
-                        </h2>
-                        <span class="severity-badge severity-high">HIGH</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${findings && findings.length > 0 ? findings.map(f => `
-                            <div class="finding-item high">
-                                <div class="finding-type">${f.type}</div>
-                                ${f.keyword ? `<div style="color: #a8b2d1; font-size: 0.9em; margin: 5px 0;">Keyword: ${f.keyword}</div>` : ''}
-                                <div class="finding-value">${f.value}</div>
-                                <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
-                            </div>
-                        `).join('') : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No secret patterns detected</p>
-                            </div>
-                        `}
-                    </div>
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item high">
+                    <div class="finding-type">${f.type}</div>
+                    ${f.keyword ? `<div style="color: #a8b2d1; font-size: 0.9em; margin: 5px 0;">Keyword: ${f.keyword}</div>` : ''}
+                    <div class="finding-value">${f.value}</div>
+                    <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
                 </div>
-            `;
+            `).join('') : '';
+            return renderSection('high', '🔐', `Secrets & Tokens (${countLabel(findings)})`,
+                'severity-high', 'HIGH', inner, 'No secret patterns detected');
         }
 
         function renderDosVectors(findings) {
-            const count = countLabel(findings);
-            const sid = 'dos';
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            💥 DoS Attack Vectors (${count})
-                        </h2>
-                        <span class="severity-badge severity-high">HIGH</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${findings && findings.length > 0 ? findings.map(f => `
-                            <div class="finding-item high">
-                                <div class="finding-type">${f.issue}</div>
-                                <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
-                                <div class="finding-note">📚 Reference: ${f.reference}</div>
-                            </div>
-                        `).join('') : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No DoS vectors detected</p>
-                            </div>
-                        `}
-                    </div>
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item high">
+                    <div class="finding-type">${f.issue}</div>
+                    <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
+                    <div class="finding-note">📚 Reference: ${f.reference}</div>
                 </div>
-            `;
+            `).join('') : '';
+            return renderSection('dos', '💥', `DoS Attack Vectors (${countLabel(findings)})`,
+                'severity-high', 'HIGH', inner, 'No DoS vectors detected');
         }
 
         function renderConfigExposure(findings) {
-            const count = countLabel(findings);
-            const sid = 'config';
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            ⚙️ Configuration Exposure (${count})
-                        </h2>
-                        <span class="severity-badge severity-medium">MEDIUM</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${findings && findings.length > 0 ? findings.map(f => `
-                            <div class="finding-item medium">
-                                <div class="finding-type">${f.type}</div>
-                                <div class="finding-note">${f.issue}</div>
-                                <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
-                            </div>
-                        `).join('') : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No configuration exposure detected</p>
-                            </div>
-                        `}
-                    </div>
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item medium">
+                    <div class="finding-type">${f.type}</div>
+                    <div class="finding-note">${f.issue}</div>
+                    <div class="finding-endpoint">📍 Endpoint: ${f.endpoint}</div>
                 </div>
-            `;
+            `).join('') : '';
+            return renderSection('config', '⚙️', `Configuration Exposure (${countLabel(findings)})`,
+                'severity-medium', 'MEDIUM', inner, 'No configuration exposure detected');
         }
 
         function renderK8sFindings(findings) {
-            const count = countLabel(findings);
-            const sid = 'k8s';
-            let content = '';
+            let inner = '';
             if (findings && Object.keys(findings).length > 0) {
                 for (const [type, items] of Object.entries(findings)) {
-                    content += `
-                        <div class="finding-item medium">
-                            <div class="finding-type">${type}</div>
-                            <div class="finding-value">${items.join(', ')}</div>
-                        </div>
-                    `;
+                    inner += `<div class="finding-item medium"><div class="finding-type">${type}</div><div class="finding-value">${items.join(', ')}</div></div>`;
                 }
-            } else {
-                content = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">✓</div>
-                        <p>No Kubernetes metadata exposed</p>
-                    </div>
-                `;
             }
-
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            ☸️ Kubernetes Metadata (${count})
-                        </h2>
-                        <span class="severity-badge severity-medium">MEDIUM</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${content}
-                    </div>
-                </div>
-            `;
+            return renderSection('k8s', '☸️', `Kubernetes Metadata (${countLabel(findings)})`,
+                'severity-medium', 'MEDIUM', inner, 'No Kubernetes metadata exposed');
         }
 
         function renderContainers(containers) {
-            const count = containerCount(containers);
-            const sid = 'containers';
-            let content = '';
+            let inner = '';
             if (containers && (containers.registries.length > 0 || containers.images.length > 0)) {
                 if (containers.registries.length > 0) {
-                    content += `
-                        <div class="finding-item">
-                            <div class="finding-type">Container Registries (${containers.registries.length})</div>
-                            <div class="domain-list">
-                                ${containers.registries.map(r => `<div class="domain-item">${r}</div>`).join('')}
-                            </div>
-                        </div>
-                    `;
+                    inner += `<div class="finding-item"><div class="finding-type">Container Registries (${containers.registries.length})</div><div class="domain-list">${containers.registries.map(r => `<div class="domain-item">${r}</div>`).join('')}</div></div>`;
                 }
                 if (containers.images.length > 0) {
                     const displayImages = containers.images.slice(0, 20);
-                    content += `
-                        <div class="finding-item">
-                            <div class="finding-type">Container Images (${containers.images.length})</div>
-                            <div class="domain-list">
-                                ${displayImages.map(i => `<div class="domain-item">${i}</div>`).join('')}
-                                ${containers.images.length > 20 ? `<div style="color: #a8b2d1; padding: 8px 12px;">... and ${containers.images.length - 20} more</div>` : ''}
-                            </div>
-                        </div>
-                    `;
+                    inner += `<div class="finding-item"><div class="finding-type">Container Images (${containers.images.length})</div><div class="domain-list">${displayImages.map(i => `<div class="domain-item">${i}</div>`).join('')}${containers.images.length > 20 ? `<div style="color: #a8b2d1; padding: 8px 12px;">... and ${containers.images.length - 20} more</div>` : ''}</div></div>`;
                 }
-            } else {
-                content = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">✓</div>
-                        <p>No container infrastructure information found</p>
-                    </div>
-                `;
             }
-
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🐳 Container Infrastructure (${count})
-                        </h2>
-                        <span class="severity-badge severity-low">INFO</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${content}
-                    </div>
-                </div>
-            `;
+            return renderSection('containers', '🐳', `Container Infrastructure (${containerCount(containers)})`,
+                'severity-low', 'INFO', inner, 'No container infrastructure information found');
         }
 
         function renderInternalRoutes(routes) {
-            const count = countLabel(routes);
-            const sid = 'routes';
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🛣️ Internal Routes (${count})
-                        </h2>
-                        <span class="severity-badge severity-low">INFO</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${routes && routes.length > 0 ? `
-                            <div class="finding-item">
-                                <div class="finding-type">Discovered Routes (${routes.length})</div>
-                                <div class="domain-list">
-                                    ${routes.map(r => `<div class="domain-item">${r}</div>`).join('')}
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No internal routes discovered</p>
-                            </div>
-                        `}
-                    </div>
-                </div>
-            `;
+            const inner = routes && routes.length > 0 ? `
+                <div class="finding-item"><div class="finding-type">Discovered Routes (${routes.length})</div><div class="domain-list">${routes.map(r => `<div class="domain-item">${r}</div>`).join('')}</div></div>
+            ` : '';
+            return renderSection('routes', '🛣️', `Internal Routes (${countLabel(routes)})`,
+                'severity-low', 'INFO', inner, 'No internal routes discovered');
         }
 
         function renderFqdns(fqdns) {
-            const count = countLabel(fqdns);
-            const sid = 'fqdns';
-            return `
-                <div class="findings-section">
-                    <div class="section-header">
-                        <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🌐 FQDNs & Network Topology (${count})
-                        </h2>
-                        <span class="severity-badge severity-low">INFO</span>
-                    </div>
-                    <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${fqdns && fqdns.length > 0 ? `
-                            <div class="finding-item">
-                                <div class="finding-type">Discovered Domains (${fqdns.length})</div>
-                                <div class="domain-list">
-                                    ${fqdns.map(f => `<div class="domain-item">${f}</div>`).join('')}
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No FQDNs discovered</p>
-                            </div>
-                        `}
-                    </div>
-                </div>
-            `;
+            const inner = fqdns && fqdns.length > 0 ? `
+                <div class="finding-item"><div class="finding-type">Discovered Domains (${fqdns.length})</div><div class="domain-list">${fqdns.map(f => `<div class="domain-item">${f}</div>`).join('')}</div></div>
+            ` : '';
+            return renderSection('fqdns', '🌐', `FQDNs & Network Topology (${countLabel(fqdns)})`,
+                'severity-low', 'INFO', inner, 'No FQDNs discovered');
         }
 
         function renderScrapeTargets(targets) {
-            const count = countLabel(targets);
-            const sid = 'scrape';
+            const inner = targets && targets.length > 0 ? targets.map(t => `
+                <div class="finding-item">
+                    <div class="finding-type">${t.job}</div>
+                    <div style="color: #a8b2d1; margin: 5px 0;">Instance: ${t.instance}</div>
+                    <div class="finding-value">${t.scrape_url}</div>
+                    <div class="finding-note">Health: ${t.health}</div>
+                </div>
+            `).join('') : '';
+            return renderSection('scrape', '🎯', `Scrape Targets (${countLabel(targets)})`,
+                'severity-low', 'INFO', inner, 'No scrape targets discovered');
+        }
+
+        function renderInfrastructure(infra) {
+            if (!infra) return '';
+            const hasData = infra.deployment_type || infra.prometheus_version ||
+                           Object.keys(infra.resource_limits || {}).length > 0 ||
+                           infra.ha_setup || infra.operator;
+            const items = [];
+            if (infra.deployment_type) {
+                const sigCount = (infra.deployment_signals || []).length;
+                items.push({label: 'Deployment', value: infra.deployment_type.toUpperCase(),
+                    details: infra.deployment_signals || []});
+            }
+            if (infra.prometheus_version) {
+                const ni = infra.node_info || {};
+                let ver = infra.prometheus_version.startsWith('v') ? infra.prometheus_version : 'v' + infra.prometheus_version;
+                if (ni.goVersion) ver += ' (Go ' + ni.goVersion;
+                if (ni.GOOS && ni.GOARCH) ver += ', ' + ni.GOOS + '/' + ni.GOARCH;
+                if (ni.goVersion) ver += ')';
+                items.push({label: 'Prometheus', value: ver, details: []});
+            }
+            if (infra.storage_retention) {
+                items.push({label: 'Storage Retention', value: infra.storage_retention, details: []});
+            }
+            const rl = infra.resource_limits || {};
+            if (Object.keys(rl).length > 0) {
+                const rDetails = [];
+                if (rl.cpu_cores) rDetails.push('CPU Cores (GOMAXPROCS): ' + rl.cpu_cores);
+                if (rl.memory_human) rDetails.push('Memory (resident): ' + rl.memory_human);
+                if (rl.goroutines) rDetails.push('Goroutines: ' + rl.goroutines.toLocaleString());
+                if (rl.open_fds) {
+                    let fdStr = rl.open_fds.toLocaleString();
+                    if (rl.max_fds) fdStr += '/' + rl.max_fds.toLocaleString();
+                    rDetails.push('Open FDs: ' + fdStr);
+                }
+                if (rl.tsdb_head_series) rDetails.push('TSDB Head Series: ' + rl.tsdb_head_series.toLocaleString());
+                if (rl.go_alloc_human) rDetails.push('Go Heap Alloc: ' + rl.go_alloc_human);
+                items.push({label: 'Resources', value: rDetails.length + ' metrics', details: rDetails});
+            }
+            if (infra.colocation && infra.colocation.length > 0) {
+                const jobs = infra.colocation.map(c => c.job);
+                items.push({label: 'Co-located Services', value: jobs.join(', '),
+                    details: infra.colocation.map(c => c.job + ' → ' + c.scrape_url + ' (' + c.health + ')')});
+            }
+            if (infra.operator) {
+                items.push({label: 'Operator', value: infra.operator, details: infra.operator_signals || []});
+            }
+            if (infra.ha_setup) {
+                items.push({label: 'HA Setup', value: infra.ha_setup, details: infra.ha_signals || []});
+            }
+            const count = hasData ? items.length + ' detected' : '0';
+            const sid = 'infra';
             return `
-                <div class="findings-section">
+                <div class="findings-section" style="border-left: 3px solid #48dbfb;">
                     <div class="section-header">
                         <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
-                            🎯 Scrape Targets (${count})
+                            🏗️ Infrastructure Analysis (${count})
                         </h2>
-                        <span class="severity-badge severity-low">INFO</span>
+                        <span class="severity-badge" style="background: linear-gradient(135deg, #0984e3, #48dbfb); color: #fff;">INFRA</span>
                     </div>
                     <div class="collapsible-content${hiddenAttr(sid)}">
-                        ${targets && targets.length > 0 ? targets.map(t => `
-                            <div class="finding-item">
-                                <div class="finding-type">${t.job}</div>
-                                <div style="color: #a8b2d1; margin: 5px 0;">Instance: ${t.instance}</div>
-                                <div class="finding-value">${t.scrape_url}</div>
-                                <div class="finding-note">Health: ${t.health}</div>
+                        ${hasData ? items.map(item => `
+                            <div class="finding-item" style="border-left: 3px solid #48dbfb;">
+                                <div class="finding-type" style="color: #48dbfb;">${item.label}</div>
+                                <div class="finding-value">${item.value}</div>
+                                ${item.details.length > 0 ? item.details.map(d => `
+                                    <div style="color: #8892b0; font-size: 0.85em; margin: 2px 0 2px 12px;">→ ${d}</div>
+                                `).join('') : ''}
                             </div>
                         `).join('') : `
                             <div class="empty-state">
-                                <div class="empty-state-icon">✓</div>
-                                <p>No scrape targets discovered</p>
+                                <div class="empty-state-icon">?</div>
+                                <p>No infrastructure data collected yet</p>
                             </div>
                         `}
                     </div>
@@ -2168,6 +2230,7 @@ def create_web_ui(scanners, port=5000):
 
     app = Flask(__name__)
     CORS(app)
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
     @app.route('/')
     def index():
@@ -2244,7 +2307,8 @@ def create_web_ui(scanners, port=5000):
                 'containers': containers,
                 'internal_routes': internal_routes,
                 'fqdns': fqdns,
-                'scrape_targets': scrape_targets
+                'scrape_targets': scrape_targets,
+                'infrastructure': scanner.findings['infrastructure']
             }
         })
 
