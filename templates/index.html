@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FireThief - {{ targets|join(', ') }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1d3a 100%);
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e2749 0%, #2d3561 100%);
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+            border: 1px solid #3a4466;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            color: #ff6b6b;
+            font-size: 1.8em;
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            color: #a8b2d1;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .target-info {
+            background: rgba(255, 107, 107, 0.1);
+            padding: 10px 16px;
+            border-radius: 5px;
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .target-info h2 {
+            color: #ff6b6b;
+            font-size: 1.2em;
+            margin-bottom: 5px;
+        }
+
+        .target-info p {
+            color: #a8b2d1;
+            font-size: 0.9em;
+        }
+
+        .theme-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid #3a4466;
+            color: #a8b2d1;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .theme-btn:hover {
+            border-color: #64ffda;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .progress-section {
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid #3a4466;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 22px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 11px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b 0%, #ff9f43 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .progress-text {
+            color: #a8b2d1;
+            font-size: 0.9em;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .status-running { background: #ff9f43; color: #000; }
+        .status-complete { background: #48dbfb; color: #000; }
+        .status-failed { background: #ff6b6b; color: #fff; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            padding: 16px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #3a4466;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .stat-card.critical { border-left: 4px solid #ff6b6b; }
+        .stat-card.high { border-left: 4px solid #ff9f43; }
+        .stat-card.medium { border-left: 4px solid #feca57; }
+        .stat-card.low { border-left: 4px solid #48dbfb; }
+
+        .stat-number {
+            font-size: 2.2em;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .stat-card.critical .stat-number { color: #ff6b6b; }
+        .stat-card.high .stat-number { color: #ff9f43; }
+        .stat-card.medium .stat-number { color: #feca57; }
+        .stat-card.low .stat-number { color: #48dbfb; }
+
+        .stat-label {
+            color: #a8b2d1;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        .findings-section {
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 14px;
+            border: 1px solid #3a4466;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3a4466;
+        }
+
+        .section-title {
+            font-size: 1.15em;
+            color: #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .severity-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .severity-critical { background: #ff6b6b; color: #fff; }
+        .severity-high { background: #ff9f43; color: #fff; }
+        .severity-medium { background: #feca57; color: #000; }
+        .severity-low { background: #48dbfb; color: #000; }
+
+        .finding-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #48dbfb;
+            transition: background 0.3s ease;
+        }
+
+        .finding-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .finding-item.critical { border-left-color: #ff6b6b; }
+        .finding-item.high { border-left-color: #ff9f43; }
+        .finding-item.medium { border-left-color: #feca57; }
+
+        .finding-type {
+            color: #64ffda;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .finding-value {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #ff6b6b;
+            margin: 10px 0;
+            word-break: break-all;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            white-space: pre-wrap;
+        }
+
+        .finding-endpoint {
+            color: #a8b2d1;
+            font-size: 0.85em;
+            margin-top: 8px;
+        }
+
+        .finding-note {
+            color: #feca57;
+            font-style: italic;
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 24px;
+            color: #48dbfb;
+        }
+
+        .empty-state-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+            color: #a8b2d1;
+            border-top: 1px solid #3a4466;
+        }
+
+        .footer-links {
+            margin-top: 15px;
+        }
+
+        .footer-links a {
+            color: #64ffda;
+            text-decoration: none;
+            margin: 0 10px;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: #ff6b6b;
+        }
+
+        .collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .collapsible::before {
+            content: '\25BC ';
+            display: inline-block;
+            transition: transform 0.3s ease;
+        }
+
+        .collapsible.collapsed::before {
+            transform: rotate(-90deg);
+        }
+
+        .collapsible-content {
+            max-height: 600px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: #3a4466 transparent;
+        }
+
+        .collapsible-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .collapsible-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .collapsible-content::-webkit-scrollbar-thumb {
+            background: #3a4466;
+            border-radius: 3px;
+        }
+
+        .collapsible-content::-webkit-scrollbar-thumb:hover {
+            background: #4a5a8a;
+        }
+
+        .collapsible-content.hidden {
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        /* Sub-section collapsible (for grouped secrets) */
+        .sub-section {
+            margin-bottom: 8px;
+            border: 1px solid #2a3050;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .sub-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .sub-section-header:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .sub-section-title {
+            color: #64ffda;
+            font-weight: bold;
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sub-section-title::before {
+            content: '\25B6';
+            font-size: 0.7em;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+
+        .sub-section.open .sub-section-title::before {
+            transform: rotate(90deg);
+        }
+
+        .sub-section-count {
+            background: rgba(255, 159, 67, 0.2);
+            color: #ff9f43;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+
+        .sub-section-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .sub-section.open .sub-section-body {
+            max-height: 2000px;
+        }
+
+        .sub-section-body .finding-item {
+            margin: 0;
+            border-radius: 0;
+            border-bottom: 1px solid #2a3050;
+        }
+
+        .sub-section-body .finding-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Info tooltip */
+        .info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid #4a5a8a;
+            color: #8892b0;
+            font-size: 0.65em;
+            font-weight: bold;
+            font-style: normal;
+            cursor: help;
+            flex-shrink: 0;
+            position: relative;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .info-icon:hover {
+            border-color: #64ffda;
+            color: #64ffda;
+        }
+
+        .section-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
+
+        .info-tooltip {
+            display: none;
+            position: absolute;
+            top: calc(100% + 10px);
+            left: 0;
+            z-index: 100;
+            width: 380px;
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            border: 1px solid #4a5a8a;
+            border-radius: 6px;
+            padding: 14px 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+        }
+
+        .section-header-left:hover .info-tooltip {
+            display: block;
+        }
+
+        .info-tooltip-title {
+            color: #64ffda;
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .info-tooltip-body {
+            color: #c0c8e0;
+            font-size: 0.8em;
+            line-height: 1.5;
+            font-weight: normal;
+        }
+
+        .info-tooltip-risk {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #3a4466;
+            color: #ff9f43;
+            font-size: 0.75em;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        body.light-mode .info-icon {
+            border-color: #c0c0c8;
+            color: #6a6a7a;
+        }
+
+        body.light-mode .info-icon:hover {
+            border-color: #0d9488;
+            color: #0d9488;
+        }
+
+        body.light-mode .info-tooltip {
+            background: #ffffff;
+            border-color: #d0d0d5;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        body.light-mode .info-tooltip-title {
+            color: #0d9488;
+        }
+
+        body.light-mode .info-tooltip-body {
+            color: #4a4a5a;
+        }
+
+        body.light-mode .info-tooltip-risk {
+            border-top-color: #e0e0e0;
+            color: #e17055;
+        }
+
+        .domain-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .domain-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px 12px;
+            border-radius: 4px;
+            border-left: 2px solid #48dbfb;
+        }
+
+        .target-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .target-btn {
+            background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
+            border: 1px solid #3a4466;
+            color: #a8b2d1;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            transition: border-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .target-btn:hover {
+            border-color: #64ffda;
+        }
+
+        .target-btn.active {
+            border-color: #ff6b6b;
+            color: #e0e0e0;
+            box-shadow: 0 0 8px rgba(255, 107, 107, 0.2);
+        }
+
+        .target-btn .target-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .target-status-dot.red { background: #ff6b6b; }
+        .target-status-dot.orange { background: #ff9f43; }
+        .target-status-dot.green { background: #2ecc71; }
+        .target-status-dot.blue { background: #48dbfb; }
+        .target-status-dot.scanning { animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            h1 {
+                font-size: 1.4em;
+            }
+        }
+
+        /* ============================================================
+           LIGHT MODE
+           ============================================================ */
+        body.light-mode {
+            background: #f0f2f5;
+            color: #1a1a2e;
+        }
+
+        body.light-mode header {
+            background: #ffffff;
+            border-color: #e0e0e0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        body.light-mode h1 {
+            color: #d63031;
+            text-shadow: none;
+        }
+
+        body.light-mode .subtitle { color: #4a4a5a; }
+
+        body.light-mode .theme-btn {
+            background: #f5f5f7;
+            border-color: #d0d0d5;
+            color: #4a4a5a;
+        }
+
+        body.light-mode .theme-btn:hover {
+            background: #e8e8ea;
+            border-color: #d63031;
+            color: #d63031;
+        }
+
+        body.light-mode .target-info {
+            background: rgba(214, 48, 49, 0.06);
+            border-left-color: #d63031;
+        }
+
+        body.light-mode .target-info h2 { color: #d63031; }
+        body.light-mode .target-info p { color: #4a4a5a; }
+
+        body.light-mode .progress-section {
+            background: #ffffff;
+            border-color: #e0e0e0;
+        }
+
+        body.light-mode .progress-bar {
+            background: #e8e8f0;
+        }
+
+        body.light-mode .progress-text { color: #4a4a5a; }
+
+        body.light-mode .stat-card {
+            background: #ffffff;
+            border-color: #e0e0e0;
+        }
+
+        body.light-mode .stat-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        body.light-mode .stat-card.critical { border-left-color: #d63031; }
+        body.light-mode .stat-card.critical .stat-number { color: #d63031; }
+        body.light-mode .stat-card.high { border-left-color: #e17055; }
+        body.light-mode .stat-card.high .stat-number { color: #e17055; }
+        body.light-mode .stat-card.medium { border-left-color: #d4a017; }
+        body.light-mode .stat-card.medium .stat-number { color: #d4a017; }
+        body.light-mode .stat-card.low { border-left-color: #2563eb; }
+        body.light-mode .stat-card.low .stat-number { color: #2563eb; }
+        body.light-mode .stat-label { color: #6a6a7a; }
+
+        body.light-mode .findings-section {
+            background: #ffffff;
+            border-color: #e0e0e0;
+        }
+
+        body.light-mode .section-header {
+            border-bottom-color: #e0e0e0;
+        }
+
+        body.light-mode .section-title { color: #1a1a2e; }
+
+        body.light-mode .finding-item {
+            background: #f8f8fa;
+            border-left-color: #2563eb;
+        }
+
+        body.light-mode .finding-item:hover {
+            background: #f0f0f5;
+        }
+
+        body.light-mode .finding-item.critical { border-left-color: #d63031; }
+        body.light-mode .finding-item.high { border-left-color: #e17055; }
+        body.light-mode .finding-item.medium { border-left-color: #d4a017; }
+
+        body.light-mode .finding-type { color: #0d9488; }
+        body.light-mode .finding-value {
+            background: #f5f5f7;
+            color: #d63031;
+            border-color: rgba(214, 48, 49, 0.2);
+        }
+        body.light-mode .finding-endpoint { color: #6a6a7a; }
+        body.light-mode .finding-note { color: #d4a017; }
+
+        body.light-mode .empty-state { color: #2563eb; }
+
+        body.light-mode .sub-section {
+            border-color: #e0e0e0;
+        }
+
+        body.light-mode .sub-section-header {
+            background: #f8f8fa;
+        }
+
+        body.light-mode .sub-section-header:hover {
+            background: #f0f0f5;
+        }
+
+        body.light-mode .sub-section-title { color: #0d9488; }
+
+        body.light-mode .sub-section-count {
+            background: rgba(225, 112, 85, 0.12);
+            color: #e17055;
+        }
+
+        body.light-mode .sub-section-body .finding-item {
+            border-bottom-color: #e8e8f0;
+        }
+
+        body.light-mode .collapsible-content {
+            scrollbar-color: #c0c0c8 transparent;
+        }
+
+        body.light-mode .collapsible-content::-webkit-scrollbar-thumb {
+            background: #c0c0c8;
+        }
+
+        body.light-mode .collapsible-content::-webkit-scrollbar-thumb:hover {
+            background: #a0a0a8;
+        }
+
+        body.light-mode .domain-item {
+            background: #f5f5f7;
+            border-left-color: #2563eb;
+            color: #1a1a2e;
+        }
+
+        body.light-mode .target-btn {
+            background: #ffffff;
+            border-color: #e0e0e0;
+            color: #4a4a5a;
+        }
+
+        body.light-mode .target-btn:hover {
+            border-color: #0d9488;
+        }
+
+        body.light-mode .target-btn.active {
+            border-color: #d63031;
+            color: #1a1a2e;
+            box-shadow: 0 0 6px rgba(214, 48, 49, 0.15);
+        }
+
+        body.light-mode footer {
+            color: #6a6a7a;
+            border-top-color: #e0e0e0;
+        }
+
+        body.light-mode .footer-links a { color: #0d9488; }
+        body.light-mode .footer-links a:hover { color: #d63031; }
+
+        body.light-mode .severity-critical { background: #d63031; }
+        body.light-mode .severity-high { background: #e17055; }
+        body.light-mode .severity-medium { background: #d4a017; }
+        body.light-mode .severity-low { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>&#x1F525; FIRETHIEF</h1>
+                    <p class="subtitle">Prometheus Security Assessment Framework</p>
+                </div>
+                <div class="header-controls">
+                    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle Light/Dark Mode">&#x2600;&#xFE0F;</button>
+                    <div class="target-info">
+                        <h2 id="current-target-label">Target</h2>
+                        <p id="current-target-url">{{ targets[0] if targets else '' }}</p>
+                        <p style="font-size: 0.8em; margin-top: 5px;"><span id="scan-time"></span></p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        {% if targets|length > 1 %}
+        <div class="target-bar" id="target-bar"></div>
+        {% endif %}
+
+        <div class="progress-section">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-bar" style="width: 0%;">
+                    <span id="progress-percent">0%</span>
+                </div>
+            </div>
+            <div class="progress-text" id="progress-text">Initializing scan...</div>
+            <span class="status-badge status-running" id="status-badge">RUNNING</span>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card critical">
+                <div class="stat-number" id="stat-critical">0</div>
+                <div class="stat-label">Critical</div>
+            </div>
+            <div class="stat-card high">
+                <div class="stat-number" id="stat-high">0</div>
+                <div class="stat-label">High</div>
+            </div>
+            <div class="stat-card medium">
+                <div class="stat-number" id="stat-medium">0</div>
+                <div class="stat-label">Medium</div>
+            </div>
+            <div class="stat-card low">
+                <div class="stat-number" id="stat-low">0</div>
+                <div class="stat-label">Low / Info</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color: #ff6b6b;" id="stat-dos">0</div>
+                <div class="stat-label">DoS Vectors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color: #64ffda;" id="stat-endpoints">0</div>
+                <div class="stat-label">Accessible Endpoints</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color: #48dbfb;" id="stat-infra">-</div>
+                <div class="stat-label">Deployment</div>
+            </div>
+        </div>
+
+        <div id="findings-container"></div>
+
+        <footer>
+            <p>FireThief v1.0 - Prometheus Security Scanner</p>
+            <p style="font-size: 0.85em; margin-top: 10px;">"Stealing fire from the Titans"</p>
+            <div class="footer-links">
+                <a href="https://www.aquasec.com/blog/300000-prometheus-servers-and-exporters-exposed-to-dos-attacks/" target="_blank">Aqua Research</a>
+                <a href="https://www.sysdig.com/blog/exposed-prometheus-exploit-kubernetes-kubeconeu" target="_blank">Sysdig K8s</a>
+                <a href="https://redsentry.com/resources/blog/securing-go-applications-against-debug-pprof-exploits" target="_blank">Red Sentry</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        let lastUpdate = null;
+        let currentTarget = 0;
+        const targetCount = {{ targets|length }};
+        const userToggledSections = {};
+        let anyScanRunning = true;
+        let isDarkMode = true;
+
+        const SECTION_INFO = {
+            infra: {
+                title: 'Infrastructure Analysis',
+                body: 'Fingerprints the target deployment by analyzing build info, runtime metrics, flags, and scrape targets. Determines whether Prometheus runs on Kubernetes or a VM, detects operators (prometheus-operator, Thanos), HA configurations, resource constraints, and co-located services.',
+                risk: 'RISK: Reveals deployment architecture, resource limits, and orchestration details that aid lateral movement and targeted attacks.'
+            },
+            critical: {
+                title: 'Critical Credential Exposures',
+                body: 'Credentials with direct access impact: cloud provider keys (AWS, Azure, GCP), full SSH/PGP private keys, Kubernetes service account tokens, and database connection strings containing passwords. These are extracted from metrics labels, pprof heap dumps, config endpoints, and debug pages.',
+                risk: 'RISK: Immediate unauthorized access to cloud accounts, databases, clusters, or remote systems. Highest priority for remediation.'
+            },
+            high: {
+                title: 'Secrets & Tokens',
+                body: 'API tokens, webhook URLs, and secret patterns detected via 60+ regex signatures. Includes GitHub/GitLab PATs, Slack/Discord tokens, Stripe keys, SendGrid/Twilio credentials, JWTs, bearer tokens, and environment variable secrets. Grouped by type for triage.',
+                risk: 'RISK: Enables account takeover, data exfiltration via SaaS APIs, payment fraud, and impersonation through stolen tokens.'
+            },
+            dos: {
+                title: 'Denial of Service Vectors',
+                body: 'Unauthenticated pprof endpoints (/debug/pprof/profile, /debug/pprof/trace) that trigger CPU profiling or tracing on demand. Each request forces the server to collect a 30-second profile, consuming significant CPU and memory. Multiple concurrent requests can exhaust the target.',
+                risk: 'RISK: Any unauthenticated user can degrade or crash the service by triggering expensive profiling operations repeatedly.'
+            },
+            config: {
+                title: 'Configuration Exposure',
+                body: 'Prometheus configuration endpoints (/api/v1/status/config, /api/v1/status/flags) that reveal scrape configs, remote write/read URLs, alertmanager addresses, and runtime flags. May contain embedded credentials in URLs or basic auth fields.',
+                risk: 'RISK: Exposes internal infrastructure topology, authentication details, and storage backends used by the monitoring stack.'
+            },
+            k8s: {
+                title: 'Kubernetes Metadata',
+                body: 'Kubernetes object references extracted from metric labels: namespaces, pod names, deployments, services, ingresses, secrets, ConfigMaps, and node names. Scraped from kube-state-metrics, cAdvisor, and Prometheus service discovery labels.',
+                risk: 'RISK: Maps the entire cluster topology \u2014 namespaces, workloads, and secret names \u2014 giving attackers a blueprint for lateral movement inside the cluster.'
+            },
+            containers: {
+                title: 'Container Infrastructure',
+                body: 'Docker/OCI container registries (ECR, GCR, ACR, Harbor, Artifactory) and image references with tags. Extracted from metric labels, scrape target metadata, and configuration endpoints.',
+                risk: 'RISK: Reveals private registry URLs (potential pull targets), image names (supply chain intelligence), and deployment versions.'
+            },
+            routes: {
+                title: 'Internal Routes & Handlers',
+                body: 'HTTP route patterns and handler paths extracted from Go stack traces in pprof dumps and metric labels. Shows the application\u2019s internal API surface including admin, debug, and health endpoints.',
+                risk: 'RISK: Reveals undocumented internal endpoints that may lack authentication, enabling direct access to admin functions or debug interfaces.'
+            },
+            fqdns: {
+                title: 'FQDNs & Network Topology',
+                body: 'Validated fully-qualified domain names from internal zones (.local, .internal, .corp, .svc.cluster.local) and external services. Filtered to remove false positives like Go package paths (fmt.Println, log.Error).',
+                risk: 'RISK: Maps internal DNS names and service dependencies, revealing the network architecture behind firewalls and NAT boundaries.'
+            },
+            scrape: {
+                title: 'Prometheus Scrape Targets',
+                body: 'Active scrape targets from /api/v1/targets showing job names, instance addresses, scrape URLs, and health status. Reveals what Prometheus is monitoring and the internal network addresses of those services.',
+                risk: 'RISK: Provides a live inventory of internal services with their IP:port addresses, effectively mapping the internal network from a single endpoint.'
+            }
+        };
+
+        (function initTheme() {
+            const saved = localStorage.getItem('firethiefTheme');
+            if (saved === 'light') {
+                isDarkMode = false;
+                document.body.classList.add('light-mode');
+                const btn = document.getElementById('themeBtn');
+                if (btn) btn.innerHTML = '&#x1F319;';
+            }
+        })();
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            document.body.classList.toggle('light-mode', !isDarkMode);
+            document.getElementById('themeBtn').innerHTML = isDarkMode ? '&#x2600;&#xFE0F;' : '&#x1F319;';
+            localStorage.setItem('firethiefTheme', isDarkMode ? 'dark' : 'light');
+        }
+
+        function selectTarget(idx) {
+            currentTarget = idx;
+            lastUpdate = null;
+            Object.keys(userToggledSections).forEach(k => delete userToggledSections[k]);
+            updateUI();
+        }
+
+        function updateTargetBar() {
+            const bar = document.getElementById('target-bar');
+            if (!bar) return;
+            fetch('/api/targets')
+                .then(r => r.json())
+                .then(targets => {
+                    anyScanRunning = targets.some(t => t.status === 'running' || t.status === 'initializing');
+                    bar.innerHTML = targets.map((t, i) => {
+                        const isScanning = (t.status === 'running' || t.status === 'initializing');
+                        const dotClass = t.dot + (isScanning ? ' scanning' : '');
+                        return '<button class="target-btn' + (i === currentTarget ? ' active' : '') + '"'
+                            + ' onclick="selectTarget(' + i + ')">'
+                            + '<span class="target-status-dot ' + dotClass + '"></span>'
+                            + t.url
+                            + ' (' + t.progress + '%)'
+                            + '</button>';
+                    }).join('');
+                });
+        }
+
+        function isSectionOpen(sectionId) {
+            if (sectionId in userToggledSections) return userToggledSections[sectionId];
+            return false;
+        }
+
+        function collapsedAttr(sectionId) {
+            return isSectionOpen(sectionId) ? '' : ' collapsed';
+        }
+
+        function hiddenAttr(sectionId) {
+            return isSectionOpen(sectionId) ? '' : ' hidden';
+        }
+
+        function countLabel(items) {
+            if (!items) return 0;
+            if (Array.isArray(items)) return items.length;
+            if (typeof items === 'object') {
+                return Object.values(items).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+            }
+            return 0;
+        }
+
+        function containerCount(c) {
+            if (!c) return 0;
+            return (c.registries ? c.registries.length : 0) + (c.images ? c.images.length : 0);
+        }
+
+        function updateUI() {
+            if (targetCount > 1) updateTargetBar();
+
+            fetch('/api/data?target=' + currentTarget)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('current-target-url').textContent = data.status.target || '';
+                    document.getElementById('stat-critical').textContent = data.stats.critical;
+                    document.getElementById('stat-high').textContent = data.stats.high;
+                    document.getElementById('stat-medium').textContent = data.stats.medium;
+                    document.getElementById('stat-low').textContent = data.stats.low;
+                    document.getElementById('stat-dos').textContent = data.stats.dos_vectors;
+                    document.getElementById('stat-endpoints').textContent = data.stats.accessible_endpoints;
+
+                    const infra = data.findings.infrastructure || {};
+                    const infraLabel = infra.deployment_type ? infra.deployment_type.toUpperCase() : '-';
+                    document.getElementById('stat-infra').textContent = infraLabel === 'KUBERNETES' ? 'K8s' : infraLabel;
+
+                    const progress = data.status.progress;
+                    document.getElementById('progress-bar').style.width = progress + '%';
+                    document.getElementById('progress-percent').textContent = progress + '%';
+                    document.getElementById('progress-text').textContent = data.status.action || 'Processing...';
+
+                    const statusBadge = document.getElementById('status-badge');
+                    statusBadge.className = 'status-badge status-' + data.status.status;
+                    statusBadge.textContent = data.status.status.toUpperCase();
+
+                    const scanTime = document.getElementById('scan-time');
+                    if (data.status.end_time) {
+                        scanTime.textContent = 'Completed: ' + new Date(data.status.end_time).toLocaleString();
+                    } else if (data.status.start_time) {
+                        scanTime.textContent = 'Started: ' + new Date(data.status.start_time).toLocaleString();
+                    }
+
+                    if (JSON.stringify(data.findings) !== lastUpdate) {
+                        renderFindings(data.findings);
+                        lastUpdate = JSON.stringify(data.findings);
+                    }
+
+                    if (anyScanRunning) {
+                        setTimeout(updateUI, 1000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating UI:', error);
+                    setTimeout(updateUI, 2000);
+                });
+        }
+
+        function renderFindings(findings) {
+            const container = document.getElementById('findings-container');
+            container.innerHTML = `
+                ${renderInfrastructure(findings.infrastructure)}
+                ${renderCriticalFindings(findings.critical_findings)}
+                ${renderHighFindings(findings.high_findings)}
+                ${renderDosVectors(findings.dos_vectors)}
+                ${renderConfigExposure(findings.config_exposure)}
+                ${renderK8sFindings(findings.k8s_findings)}
+                ${renderContainers(findings.containers)}
+                ${renderInternalRoutes(findings.internal_routes)}
+                ${renderFqdns(findings.fqdns)}
+                ${renderScrapeTargets(findings.scrape_targets)}
+            `;
+        }
+
+        function infoTooltipHtml(sid) {
+            const info = SECTION_INFO[sid];
+            if (!info) return '';
+            return '<span class="info-icon">i</span>'
+                + '<div class="info-tooltip">'
+                + '<div class="info-tooltip-title">' + info.title + '</div>'
+                + '<div class="info-tooltip-body">' + info.body + '</div>'
+                + '<div class="info-tooltip-risk">' + info.risk + '</div>'
+                + '</div>';
+        }
+
+        function renderSection(sid, icon, title, badgeClass, badgeText, innerHtml, emptyMsg) {
+            return `
+                <div class="findings-section">
+                    <div class="section-header">
+                        <div class="section-header-left">
+                            <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                                ${icon} ${title}
+                            </h2>
+                            ${infoTooltipHtml(sid)}
+                        </div>
+                        <span class="severity-badge ${badgeClass}">${badgeText}</span>
+                    </div>
+                    <div class="collapsible-content${hiddenAttr(sid)}">
+                        ${innerHtml || '<div class="empty-state"><div class="empty-state-icon">&#x2713;</div><p>' + emptyMsg + '</p></div>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCriticalFindings(findings) {
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item critical">
+                    <div class="finding-type">${f.type}</div>
+                    <div class="finding-value">${f.value}</div>
+                    <div class="finding-endpoint">&#x1F4CD; Endpoint: ${f.endpoint}</div>
+                    ${f.note ? '<div class="finding-note">&#x26A0;&#xFE0F; ' + f.note + '</div>' : ''}
+                </div>
+            `).join('') : '';
+            return renderSection('critical', '&#x1F6A8;', 'Critical Findings (' + countLabel(findings) + ')',
+                'severity-critical', 'CRITICAL', inner, 'No critical credential exposures detected');
+        }
+
+        function renderHighFindings(findings) {
+            const totalCount = countLabel(findings);
+            let inner = '';
+            if (findings && typeof findings === 'object' && Object.keys(findings).length > 0) {
+                const types = Object.keys(findings).sort();
+                inner = types.map(type => {
+                    const items = findings[type];
+                    const subSid = 'high_' + type;
+                    const isOpen = isSectionOpen(subSid);
+                    return `
+                        <div class="sub-section${isOpen ? ' open' : ''}" data-sid="${subSid}">
+                            <div class="sub-section-header" onclick="toggleSubSection(this, '${subSid}')">
+                                <span class="sub-section-title">${type}</span>
+                                <span class="sub-section-count">${items.length}</span>
+                            </div>
+                            <div class="sub-section-body">
+                                ${items.map(f => `
+                                    <div class="finding-item high">
+                                        ${f.keyword ? '<div style="color: #a8b2d1; font-size: 0.9em; margin-bottom: 5px;">Keyword: ' + f.keyword + '</div>' : ''}
+                                        <div class="finding-value">${f.value}</div>
+                                        <div class="finding-endpoint">&#x1F4CD; Endpoint: ${f.endpoint}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            return renderSection('high', '&#x1F510;', 'Secrets & Tokens (' + totalCount + ')',
+                'severity-high', 'HIGH', inner, 'No secret patterns detected');
+        }
+
+        function toggleSubSection(element, sectionId) {
+            const sub = element.closest('.sub-section');
+            const isCurrentlyOpen = sub.classList.contains('open');
+            userToggledSections[sectionId] = !isCurrentlyOpen;
+            sub.classList.toggle('open');
+        }
+
+        function renderDosVectors(findings) {
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item high">
+                    <div class="finding-type">${f.issue}</div>
+                    <div class="finding-endpoint">&#x1F4CD; Endpoint: ${f.endpoint}</div>
+                    <div class="finding-note">&#x1F4DA; Reference: ${f.reference}</div>
+                </div>
+            `).join('') : '';
+            return renderSection('dos', '&#x1F4A5;', 'DoS Attack Vectors (' + countLabel(findings) + ')',
+                'severity-high', 'HIGH', inner, 'No DoS vectors detected');
+        }
+
+        function renderConfigExposure(findings) {
+            const inner = findings && findings.length > 0 ? findings.map(f => `
+                <div class="finding-item medium">
+                    <div class="finding-type">${f.type}</div>
+                    <div class="finding-note">${f.issue}</div>
+                    <div class="finding-endpoint">&#x1F4CD; Endpoint: ${f.endpoint}</div>
+                </div>
+            `).join('') : '';
+            return renderSection('config', '&#x2699;&#xFE0F;', 'Configuration Exposure (' + countLabel(findings) + ')',
+                'severity-medium', 'MEDIUM', inner, 'No configuration exposure detected');
+        }
+
+        function renderK8sFindings(findings) {
+            let inner = '';
+            if (findings && Object.keys(findings).length > 0) {
+                for (const [type, items] of Object.entries(findings)) {
+                    inner += '<div class="finding-item medium"><div class="finding-type">' + type + '</div><div class="finding-value">' + items.join(', ') + '</div></div>';
+                }
+            }
+            return renderSection('k8s', '&#x2638;&#xFE0F;', 'Kubernetes Metadata (' + countLabel(findings) + ')',
+                'severity-medium', 'MEDIUM', inner, 'No Kubernetes metadata exposed');
+        }
+
+        function renderContainers(containers) {
+            let inner = '';
+            if (containers && (containers.registries.length > 0 || containers.images.length > 0)) {
+                if (containers.registries.length > 0) {
+                    inner += '<div class="finding-item"><div class="finding-type">Container Registries (' + containers.registries.length + ')</div><div class="domain-list">' + containers.registries.map(r => '<div class="domain-item">' + r + '</div>').join('') + '</div></div>';
+                }
+                if (containers.images.length > 0) {
+                    const displayImages = containers.images.slice(0, 20);
+                    inner += '<div class="finding-item"><div class="finding-type">Container Images (' + containers.images.length + ')</div><div class="domain-list">' + displayImages.map(i => '<div class="domain-item">' + i + '</div>').join('') + (containers.images.length > 20 ? '<div style="color: #a8b2d1; padding: 8px 12px;">... and ' + (containers.images.length - 20) + ' more</div>' : '') + '</div></div>';
+                }
+            }
+            return renderSection('containers', '&#x1F433;', 'Container Infrastructure (' + containerCount(containers) + ')',
+                'severity-low', 'INFO', inner, 'No container infrastructure information found');
+        }
+
+        function renderInternalRoutes(routes) {
+            const inner = routes && routes.length > 0 ? '<div class="finding-item"><div class="finding-type">Discovered Routes (' + routes.length + ')</div><div class="domain-list">' + routes.map(r => '<div class="domain-item">' + r + '</div>').join('') + '</div></div>' : '';
+            return renderSection('routes', '&#x1F6E3;&#xFE0F;', 'Internal Routes (' + countLabel(routes) + ')',
+                'severity-low', 'INFO', inner, 'No internal routes discovered');
+        }
+
+        function renderFqdns(fqdns) {
+            const inner = fqdns && fqdns.length > 0 ? '<div class="finding-item"><div class="finding-type">Discovered Domains (' + fqdns.length + ')</div><div class="domain-list">' + fqdns.map(f => '<div class="domain-item">' + f + '</div>').join('') + '</div></div>' : '';
+            return renderSection('fqdns', '&#x1F310;', 'FQDNs & Network Topology (' + countLabel(fqdns) + ')',
+                'severity-low', 'INFO', inner, 'No FQDNs discovered');
+        }
+
+        function renderScrapeTargets(targets) {
+            const inner = targets && targets.length > 0 ? targets.map(t => `
+                <div class="finding-item">
+                    <div class="finding-type">${t.job}</div>
+                    <div style="color: #a8b2d1; margin: 5px 0;">Instance: ${t.instance}</div>
+                    <div class="finding-value">${t.scrape_url}</div>
+                    <div class="finding-note">Health: ${t.health}</div>
+                </div>
+            `).join('') : '';
+            return renderSection('scrape', '&#x1F3AF;', 'Scrape Targets (' + countLabel(targets) + ')',
+                'severity-low', 'INFO', inner, 'No scrape targets discovered');
+        }
+
+        function renderInfrastructure(infra) {
+            if (!infra) return '';
+            const hasData = infra.deployment_type || infra.prometheus_version ||
+                           Object.keys(infra.resource_limits || {}).length > 0 ||
+                           infra.ha_setup || infra.operator;
+            const items = [];
+            if (infra.deployment_type) {
+                items.push({label: 'Deployment', value: infra.deployment_type.toUpperCase(),
+                    details: infra.deployment_signals || []});
+            }
+            if (infra.prometheus_version) {
+                const ni = infra.node_info || {};
+                let ver = infra.prometheus_version.startsWith('v') ? infra.prometheus_version : 'v' + infra.prometheus_version;
+                if (ni.goVersion) ver += ' (Go ' + ni.goVersion;
+                if (ni.GOOS && ni.GOARCH) ver += ', ' + ni.GOOS + '/' + ni.GOARCH;
+                if (ni.goVersion) ver += ')';
+                items.push({label: 'Prometheus', value: ver, details: []});
+            }
+            if (infra.storage_retention) {
+                items.push({label: 'Storage Retention', value: infra.storage_retention, details: []});
+            }
+            const rl = infra.resource_limits || {};
+            if (Object.keys(rl).length > 0) {
+                const rDetails = [];
+                if (rl.cpu_cores) rDetails.push('CPU Cores (GOMAXPROCS): ' + rl.cpu_cores);
+                if (rl.memory_human) rDetails.push('Memory (resident): ' + rl.memory_human);
+                if (rl.goroutines) rDetails.push('Goroutines: ' + rl.goroutines.toLocaleString());
+                if (rl.open_fds) {
+                    let fdStr = rl.open_fds.toLocaleString();
+                    if (rl.max_fds) fdStr += '/' + rl.max_fds.toLocaleString();
+                    rDetails.push('Open FDs: ' + fdStr);
+                }
+                if (rl.tsdb_head_series) rDetails.push('TSDB Head Series: ' + rl.tsdb_head_series.toLocaleString());
+                if (rl.go_alloc_human) rDetails.push('Go Heap Alloc: ' + rl.go_alloc_human);
+                items.push({label: 'Resources', value: rDetails.length + ' metrics', details: rDetails});
+            }
+            if (infra.colocation && infra.colocation.length > 0) {
+                const jobs = infra.colocation.map(c => c.job);
+                items.push({label: 'Co-located Services', value: jobs.join(', '),
+                    details: infra.colocation.map(c => c.job + ' \u2192 ' + c.scrape_url + ' (' + c.health + ')')});
+            }
+            if (infra.operator) {
+                items.push({label: 'Operator', value: infra.operator, details: infra.operator_signals || []});
+            }
+            if (infra.ha_setup) {
+                items.push({label: 'HA Setup', value: infra.ha_setup, details: infra.ha_signals || []});
+            }
+            const count = hasData ? items.length + ' detected' : '0';
+            const sid = 'infra';
+            return `
+                <div class="findings-section" style="border-left: 3px solid #48dbfb;">
+                    <div class="section-header">
+                        <div class="section-header-left">
+                            <h2 class="section-title collapsible${collapsedAttr(sid)}" onclick="toggleSection(this, '${sid}')">
+                                &#x1F3D7;&#xFE0F; Infrastructure Analysis (${count})
+                            </h2>
+                            ${infoTooltipHtml('infra')}
+                        </div>
+                        <span class="severity-badge" style="background: linear-gradient(135deg, #0984e3, #48dbfb); color: #fff;">INFRA</span>
+                    </div>
+                    <div class="collapsible-content${hiddenAttr(sid)}">
+                        ${hasData ? items.map(item => `
+                            <div class="finding-item" style="border-left: 3px solid #48dbfb;">
+                                <div class="finding-type" style="color: #48dbfb;">${item.label}</div>
+                                <div class="finding-value">${item.value}</div>
+                                ${item.details.length > 0 ? item.details.map(d =>
+                                    '<div style="color: #8892b0; font-size: 0.85em; margin: 2px 0 2px 12px;">\u2192 ' + d + '</div>'
+                                ).join('') : ''}
+                            </div>
+                        `).join('') : `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">?</div>
+                                <p>No infrastructure data collected yet</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleSection(element, sectionId) {
+            const isCurrentlyCollapsed = element.classList.contains('collapsed');
+            userToggledSections[sectionId] = isCurrentlyCollapsed;
+            element.classList.toggle('collapsed');
+            const content = element.closest('.section-header').nextElementSibling;
+            content.classList.toggle('hidden');
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (e.key === 't' || e.key === 'T') {
+                toggleTheme();
+            }
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>
