@@ -99,6 +99,7 @@ class PrometheusScanner:
         }
 
         self._infra_raw = {}
+        self._seen_credentials = set()  # Global dedup: (type, value) pairs
 
         self.endpoints = self._get_discovery_endpoints()
         self.patterns = compile_patterns()
@@ -117,6 +118,52 @@ class PrometheusScanner:
         if self.verbose and action:
             print(f"[*] {action}")
     
+    # Placeholder/test values that should never be reported as real credentials
+    PLACEHOLDER_BLOCKLIST = {
+        'changeme', 'change_me', 'example', 'placeholder', 'redacted',
+        'your_key_here', 'your_token_here', 'your_secret_here', 'your_api_key',
+        'insert_key_here', 'insert_token_here', 'xxx', 'xxxx', 'xxxxx',
+        'test', 'testing', 'dummy', 'fake', 'sample', 'demo', 'default',
+        'none', 'null', 'undefined', 'todo', 'fixme', 'replace_me',
+        'password', 'password123', 'admin', 'secret', 'token',
+        'abcdef', 'abcdefgh', '12345678', '123456789', '1234567890',
+        'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', '0000000000000000',
+        'ffffffffffffffff', 'deadbeef', 'cafebabe',
+    }
+
+    @staticmethod
+    def _shannon_entropy(s: str) -> float:
+        """Calculate Shannon entropy of a string. Higher = more random = more likely real."""
+        import math
+        if not s:
+            return 0.0
+        freq = {}
+        for c in s:
+            freq[c] = freq.get(c, 0) + 1
+        length = len(s)
+        return -sum((count / length) * math.log2(count / length) for count in freq.values())
+
+    def _is_placeholder(self, value: str) -> bool:
+        """Check if a credential value is a known placeholder or test value."""
+        normalized = value.lower().strip().rstrip('.')
+        if normalized in self.PLACEHOLDER_BLOCKLIST:
+            return True
+        # Check for repeated characters (e.g., 'aaaaaa', '000000')
+        if len(set(normalized)) <= 2 and len(normalized) >= 8:
+            return True
+        # Check for sequential patterns
+        if normalized in ('abcdefghijklmnop', '0123456789abcdef'):
+            return True
+        return False
+
+    def _dedup_credential(self, cred_type: str, value: str) -> bool:
+        """Return True if this credential was already seen (is a duplicate)."""
+        key = (cred_type, value)
+        if key in self._seen_credentials:
+            return True
+        self._seen_credentials.add(key)
+        return False
+
     def _check_go_pprof(self) -> bool:
         try:
             result = subprocess.run(['go', 'version'], capture_output=True, timeout=5)
@@ -562,22 +609,53 @@ class PrometheusScanner:
             print(f"[*] Analyzing {content_type} content from {endpoint} ({len(text)} chars)")
 
         for match in self.patterns['secret_keywords'].finditer(text):
+            val = match.group(2)
+            if self._is_placeholder(val):
+                continue
+            if self._shannon_entropy(val) < 2.5 and len(val) < 30:
+                continue
+            display_val = val[:50] + ('...' if len(val) > 50 else '')
+            if self._dedup_credential('keyword_secret', display_val):
+                continue
             self.findings['secrets'].append({
                 'type': 'keyword_secret',
                 'keyword': match.group(1),
-                'value': match.group(2)[:50] + ('...' if len(match.group(2)) > 50 else ''),
+                'value': display_val,
                 'endpoint': endpoint,
                 'severity': 'HIGH'
             })
 
-        # Data-driven credential detection
+        # Data-driven credential detection with entropy, placeholder, and dedup filtering
+        # Patterns that have strong structural prefixes and don't need entropy checks
+        ENTROPY_EXEMPT = {
+            'aws_key', 'github_pat', 'github_oauth', 'github_app', 'github_refresh',
+            'github_fine_grained', 'gitlab_pat', 'gitlab_runner', 'npm_token', 'pypi_token',
+            'slack_bot_token', 'slack_user_token', 'slack_workspace', 'slack_webhook',
+            'stripe_live_secret', 'stripe_test_secret', 'stripe_live_pub', 'stripe_restricted',
+            'square_access', 'square_oauth', 'sendgrid_api', 'digitalocean_pat',
+            'digitalocean_oauth', 'digitalocean_refresh', 'shopify_token', 'shopify_shared',
+            'shopify_custom', 'shopify_private', 'mailgun_api', 'mailgun_signing',
+            'newrelic_api', 'newrelic_insights', 'grafana_key', 'grafana_service_account',
+            'gcp_api_key', 'azure_storage', 'discord_webhook', 'jwt',
+            'ssh_private_key', 'ssh_private_key_full', 'pgp_private_key',
+        }
         for pattern_key, cred_type, group_idx, truncate, severity in CREDENTIAL_RULES:
             if pattern_key not in self.patterns:
                 continue
             for match in self.patterns[pattern_key].finditer(text):
                 val = match.group(group_idx)
+                # Placeholder check on raw value
+                if self._is_placeholder(val):
+                    continue
+                # Entropy check for patterns without strong structural prefixes
+                if pattern_key not in ENTROPY_EXEMPT:
+                    if self._shannon_entropy(val) < 3.0 and len(val) < 50:
+                        continue
                 if truncate:
                     val = val[:truncate] + '...'
+                # Global dedup
+                if self._dedup_credential(cred_type, val):
+                    continue
                 self.findings['credentials'].append({
                     'type': cred_type, 'value': val,
                     'endpoint': endpoint, 'severity': severity
@@ -585,37 +663,54 @@ class PrometheusScanner:
 
         # Special cases with extra fields or dedup logic
         for match in self.patterns['ssh_private_key_full'].finditer(text):
-            self.findings['credentials'].append({
-                'type': 'SSH_PRIVATE_KEY', 'value': 'FULL PRIVATE KEY DETECTED',
-                'endpoint': endpoint, 'severity': 'CRITICAL',
-                'note': 'Complete SSH private key found in content'
-            })
+            if not self._dedup_credential('SSH_PRIVATE_KEY', 'FULL PRIVATE KEY DETECTED'):
+                self.findings['credentials'].append({
+                    'type': 'SSH_PRIVATE_KEY', 'value': 'FULL PRIVATE KEY DETECTED',
+                    'endpoint': endpoint, 'severity': 'CRITICAL',
+                    'note': 'Complete SSH private key found in content'
+                })
 
         for match in self.patterns['ssh_private_key'].finditer(text):
-            if not any(c.get('type') == 'SSH_PRIVATE_KEY' and c.get('endpoint') == endpoint
-                      for c in self.findings['credentials']):
+            if not self._dedup_credential('SSH_PRIVATE_KEY_HEADER', 'SSH PRIVATE KEY DETECTED'):
                 self.findings['credentials'].append({
                     'type': 'SSH_PRIVATE_KEY_HEADER', 'value': 'SSH PRIVATE KEY DETECTED',
                     'endpoint': endpoint, 'severity': 'CRITICAL'
                 })
 
         for match in self.patterns['api_token_header'].finditer(text):
+            val = match.group(2)
+            if self._is_placeholder(val):
+                continue
+            display_val = val[:30] + '...'
+            if self._dedup_credential('API_TOKEN_HEADER', display_val):
+                continue
             self.findings['credentials'].append({
                 'type': 'API_TOKEN_HEADER', 'header': match.group(1),
-                'value': match.group(2)[:30] + '...', 'endpoint': endpoint, 'severity': 'HIGH'
+                'value': display_val, 'endpoint': endpoint, 'severity': 'HIGH'
             })
 
         for match in self.patterns['k8s_sa_token'].finditer(text):
+            val = match.group(1)[:30] + '...'
+            if self._dedup_credential('K8S_SERVICE_ACCOUNT_TOKEN', val):
+                continue
             self.findings['credentials'].append({
-                'type': 'K8S_SERVICE_ACCOUNT_TOKEN', 'value': match.group(1)[:30] + '...',
+                'type': 'K8S_SERVICE_ACCOUNT_TOKEN', 'value': val,
                 'endpoint': endpoint, 'severity': 'CRITICAL',
                 'note': 'K8s SA token - can be used for cluster access'
             })
 
         for match in self.patterns['env_var_secret'].finditer(text):
+            raw_val = match.group(2)
+            if self._is_placeholder(raw_val):
+                continue
+            if self._shannon_entropy(raw_val) < 2.5 and len(raw_val) < 30:
+                continue
+            display_val = raw_val[:50] + '...'
+            if self._dedup_credential('ENVIRONMENT_VARIABLE_SECRET', display_val):
+                continue
             self.findings['credentials'].append({
                 'type': 'ENVIRONMENT_VARIABLE_SECRET', 'variable': match.group(1),
-                'value': match.group(2)[:50] + '...', 'endpoint': endpoint, 'severity': 'HIGH'
+                'value': display_val, 'endpoint': endpoint, 'severity': 'HIGH'
             })
 
         seen_fqdns = set()

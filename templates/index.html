@@ -19,9 +19,9 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 20px 30px;
         }
 
         header {
@@ -143,25 +143,53 @@
         .status-complete { background: #48dbfb; color: #000; }
         .status-failed { background: #ff6b6b; color: #fff; }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
+        .main-layout {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .stats-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: sticky;
+            top: 20px;
+        }
+
+        .findings-panel {
+            flex: 1;
+            min-width: 0;
+        }
+
+        @media (min-width: 1600px) {
+            .stats-sidebar {
+                width: 250px;
+            }
+
+            .stat-number {
+                font-size: 2.2em;
+            }
+
+            .stat-label {
+                font-size: 0.8em;
+            }
         }
 
         .stat-card {
             background: linear-gradient(135deg, #1e2749 0%, #252d4f 100%);
-            padding: 16px;
+            padding: 14px 16px;
             border-radius: 6px;
             text-align: center;
             border: 1px solid #3a4466;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+            transform: translateX(3px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
         }
 
         .stat-card.critical { border-left: 4px solid #ff6b6b; }
@@ -170,9 +198,9 @@
         .stat-card.low { border-left: 4px solid #48dbfb; }
 
         .stat-number {
-            font-size: 2.2em;
+            font-size: 1.8em;
             font-weight: bold;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
 
         .stat-card.critical .stat-number { color: #ff6b6b; }
@@ -183,7 +211,7 @@
         .stat-label {
             color: #a8b2d1;
             text-transform: uppercase;
-            font-size: 0.85em;
+            font-size: 0.7em;
             letter-spacing: 1px;
         }
 
@@ -593,14 +621,27 @@
             50% { opacity: 0.4; }
         }
 
+        @media (max-width: 900px) {
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .stats-sidebar {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+                position: static;
+            }
+
+            .stats-sidebar .stat-card {
+                flex: 1 1 120px;
+            }
+        }
+
         @media (max-width: 768px) {
             .header-content {
                 flex-direction: column;
                 gap: 20px;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
             }
 
             h1 {
@@ -660,6 +701,7 @@
 
         body.light-mode .progress-text { color: #4a4a5a; }
 
+        body.light-mode .stats-sidebar .stat-card,
         body.light-mode .stat-card {
             background: #ffffff;
             border-color: #e0e0e0;
@@ -783,6 +825,422 @@
         body.light-mode .severity-high { background: #e17055; }
         body.light-mode .severity-medium { background: #d4a017; }
         body.light-mode .severity-low { background: #2563eb; }
+
+        /* ============================================================
+           MATRIX MODE — black + cyber green
+           ============================================================ */
+        body.matrix-mode {
+            background: #000000;
+            color: #33ff33;
+        }
+
+        body.matrix-mode header {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.08);
+        }
+
+        body.matrix-mode h1 {
+            color: #00ff41;
+            text-shadow: 0 0 15px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 255, 65, 0.2);
+        }
+
+        body.matrix-mode .subtitle { color: #2d8a2d; }
+
+        body.matrix-mode .theme-btn {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+            color: #33ff33;
+        }
+
+        body.matrix-mode .theme-btn:hover {
+            background: #0f1a0f;
+            border-color: #00ff41;
+            color: #00ff41;
+        }
+
+        body.matrix-mode .target-info {
+            background: rgba(0, 255, 65, 0.05);
+            border-left-color: #00ff41;
+        }
+
+        body.matrix-mode .target-info h2 { color: #00ff41; }
+        body.matrix-mode .target-info p { color: #2d8a2d; }
+
+        body.matrix-mode .progress-section {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+        }
+
+        body.matrix-mode .progress-bar {
+            background: #111;
+        }
+
+        body.matrix-mode .progress-fill {
+            background: linear-gradient(90deg, #00ff41 0%, #33ff33 100%);
+            color: #000;
+        }
+
+        body.matrix-mode .progress-text { color: #2d8a2d; }
+
+        body.matrix-mode .status-running { background: #00ff41; color: #000; }
+        body.matrix-mode .status-complete { background: #33ff33; color: #000; }
+        body.matrix-mode .status-failed { background: #ff0040; color: #fff; }
+
+        body.matrix-mode .stat-card {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+        }
+
+        body.matrix-mode .stat-card:hover {
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.15);
+        }
+
+        body.matrix-mode .stat-card.critical { border-left-color: #ff0040; }
+        body.matrix-mode .stat-card.critical .stat-number { color: #ff0040; }
+        body.matrix-mode .stat-card.high { border-left-color: #ff8c00; }
+        body.matrix-mode .stat-card.high .stat-number { color: #ff8c00; }
+        body.matrix-mode .stat-card.medium { border-left-color: #ccff00; }
+        body.matrix-mode .stat-card.medium .stat-number { color: #ccff00; }
+        body.matrix-mode .stat-card.low { border-left-color: #00ff41; }
+        body.matrix-mode .stat-card.low .stat-number { color: #00ff41; }
+        body.matrix-mode .stat-label { color: #2d8a2d; }
+
+        body.matrix-mode .findings-section {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+        }
+
+        body.matrix-mode .section-header {
+            border-bottom-color: #1a3a1a;
+        }
+
+        body.matrix-mode .section-title { color: #33ff33; }
+
+        body.matrix-mode .finding-item {
+            background: rgba(0, 255, 65, 0.03);
+            border-left-color: #00ff41;
+        }
+
+        body.matrix-mode .finding-item:hover {
+            background: rgba(0, 255, 65, 0.08);
+        }
+
+        body.matrix-mode .finding-item.critical { border-left-color: #ff0040; }
+        body.matrix-mode .finding-item.high { border-left-color: #ff8c00; }
+        body.matrix-mode .finding-item.medium { border-left-color: #ccff00; }
+
+        body.matrix-mode .finding-type { color: #00ff41; }
+        body.matrix-mode .finding-value {
+            background: #050505;
+            color: #00ff41;
+            border-color: rgba(0, 255, 65, 0.25);
+        }
+        body.matrix-mode .finding-endpoint { color: #2d8a2d; }
+        body.matrix-mode .finding-note { color: #ccff00; }
+
+        body.matrix-mode .empty-state { color: #00ff41; }
+
+        body.matrix-mode .sub-section {
+            border-color: #1a3a1a;
+        }
+
+        body.matrix-mode .sub-section-header {
+            background: rgba(0, 255, 65, 0.03);
+        }
+
+        body.matrix-mode .sub-section-header:hover {
+            background: rgba(0, 255, 65, 0.07);
+        }
+
+        body.matrix-mode .sub-section-title { color: #00ff41; }
+
+        body.matrix-mode .sub-section-count {
+            background: rgba(0, 255, 65, 0.12);
+            color: #33ff33;
+        }
+
+        body.matrix-mode .sub-section-body .finding-item {
+            border-bottom-color: #1a3a1a;
+        }
+
+        body.matrix-mode .collapsible-content {
+            scrollbar-color: #1a3a1a transparent;
+        }
+
+        body.matrix-mode .collapsible-content::-webkit-scrollbar-thumb {
+            background: #1a3a1a;
+        }
+
+        body.matrix-mode .collapsible-content::-webkit-scrollbar-thumb:hover {
+            background: #2a5a2a;
+        }
+
+        body.matrix-mode .domain-item {
+            background: #050505;
+            border-left-color: #00ff41;
+            color: #33ff33;
+        }
+
+        body.matrix-mode .target-btn {
+            background: #0a0a0a;
+            border-color: #1a3a1a;
+            color: #2d8a2d;
+        }
+
+        body.matrix-mode .target-btn:hover {
+            border-color: #00ff41;
+        }
+
+        body.matrix-mode .target-btn.active {
+            border-color: #00ff41;
+            color: #33ff33;
+            box-shadow: 0 0 8px rgba(0, 255, 65, 0.2);
+        }
+
+        body.matrix-mode footer {
+            color: #2d8a2d;
+            border-top-color: #1a3a1a;
+        }
+
+        body.matrix-mode .footer-links a { color: #00ff41; }
+        body.matrix-mode .footer-links a:hover { color: #ccff00; }
+
+        body.matrix-mode .severity-critical { background: #ff0040; }
+        body.matrix-mode .severity-high { background: #ff8c00; }
+        body.matrix-mode .severity-medium { background: #ccff00; color: #000; }
+        body.matrix-mode .severity-low { background: #00ff41; color: #000; }
+
+        body.matrix-mode .info-icon {
+            border-color: #1a3a1a;
+            color: #2d8a2d;
+        }
+
+        body.matrix-mode .info-icon:hover {
+            border-color: #00ff41;
+            color: #00ff41;
+        }
+
+        body.matrix-mode .info-tooltip {
+            background: #0a0a0a;
+            border-color: #00ff41;
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.15);
+        }
+
+        body.matrix-mode .info-tooltip-title { color: #00ff41; }
+        body.matrix-mode .info-tooltip-body { color: #33ff33; }
+        body.matrix-mode .info-tooltip-risk {
+            border-top-color: #1a3a1a;
+            color: #ff8c00;
+        }
+
+        /* ============================================================
+           EMBER MODE — dark + orange/amber
+           ============================================================ */
+        body.ember-mode {
+            background: linear-gradient(135deg, #0d0906 0%, #1a120d 100%);
+            color: #e8d5c4;
+        }
+
+        body.ember-mode header {
+            background: linear-gradient(135deg, #1a120d 0%, #261a10 100%);
+            border-color: #3d2a1a;
+            box-shadow: 0 0 20px rgba(255, 140, 0, 0.08);
+        }
+
+        body.ember-mode h1 {
+            color: #ff8c00;
+            text-shadow: 0 0 15px rgba(255, 140, 0, 0.5), 0 0 30px rgba(255, 100, 0, 0.2);
+        }
+
+        body.ember-mode .subtitle { color: #a07850; }
+
+        body.ember-mode .theme-btn {
+            background: #1a120d;
+            border-color: #3d2a1a;
+            color: #cc7a00;
+        }
+
+        body.ember-mode .theme-btn:hover {
+            background: #261a10;
+            border-color: #ff8c00;
+            color: #ff8c00;
+        }
+
+        body.ember-mode .target-info {
+            background: rgba(255, 140, 0, 0.06);
+            border-left-color: #ff8c00;
+        }
+
+        body.ember-mode .target-info h2 { color: #ff8c00; }
+        body.ember-mode .target-info p { color: #a07850; }
+
+        body.ember-mode .progress-section {
+            background: linear-gradient(135deg, #1a120d 0%, #201510 100%);
+            border-color: #3d2a1a;
+        }
+
+        body.ember-mode .progress-bar {
+            background: #110c08;
+        }
+
+        body.ember-mode .progress-fill {
+            background: linear-gradient(90deg, #ff6600 0%, #ff9f43 100%);
+            color: #000;
+        }
+
+        body.ember-mode .progress-text { color: #a07850; }
+
+        body.ember-mode .status-running { background: #ff8c00; color: #000; }
+        body.ember-mode .status-complete { background: #ffb347; color: #000; }
+        body.ember-mode .status-failed { background: #ff4040; color: #fff; }
+
+        body.ember-mode .stat-card {
+            background: linear-gradient(135deg, #1a120d 0%, #201510 100%);
+            border-color: #3d2a1a;
+        }
+
+        body.ember-mode .stat-card:hover {
+            box-shadow: 0 0 15px rgba(255, 140, 0, 0.12);
+        }
+
+        body.ember-mode .stat-card.critical { border-left-color: #ff4040; }
+        body.ember-mode .stat-card.critical .stat-number { color: #ff4040; }
+        body.ember-mode .stat-card.high { border-left-color: #ff8c00; }
+        body.ember-mode .stat-card.high .stat-number { color: #ff8c00; }
+        body.ember-mode .stat-card.medium { border-left-color: #ffb347; }
+        body.ember-mode .stat-card.medium .stat-number { color: #ffb347; }
+        body.ember-mode .stat-card.low { border-left-color: #cc7a00; }
+        body.ember-mode .stat-card.low .stat-number { color: #cc7a00; }
+        body.ember-mode .stat-label { color: #a07850; }
+
+        body.ember-mode .findings-section {
+            background: linear-gradient(135deg, #1a120d 0%, #201510 100%);
+            border-color: #3d2a1a;
+        }
+
+        body.ember-mode .section-header {
+            border-bottom-color: #3d2a1a;
+        }
+
+        body.ember-mode .section-title { color: #e8d5c4; }
+
+        body.ember-mode .finding-item {
+            background: rgba(255, 140, 0, 0.03);
+            border-left-color: #cc7a00;
+        }
+
+        body.ember-mode .finding-item:hover {
+            background: rgba(255, 140, 0, 0.08);
+        }
+
+        body.ember-mode .finding-item.critical { border-left-color: #ff4040; }
+        body.ember-mode .finding-item.high { border-left-color: #ff8c00; }
+        body.ember-mode .finding-item.medium { border-left-color: #ffb347; }
+
+        body.ember-mode .finding-type { color: #ff8c00; }
+        body.ember-mode .finding-value {
+            background: #0d0906;
+            color: #ffb347;
+            border-color: rgba(255, 140, 0, 0.25);
+        }
+        body.ember-mode .finding-endpoint { color: #a07850; }
+        body.ember-mode .finding-note { color: #ffb347; }
+
+        body.ember-mode .empty-state { color: #cc7a00; }
+
+        body.ember-mode .sub-section {
+            border-color: #3d2a1a;
+        }
+
+        body.ember-mode .sub-section-header {
+            background: rgba(255, 140, 0, 0.03);
+        }
+
+        body.ember-mode .sub-section-header:hover {
+            background: rgba(255, 140, 0, 0.07);
+        }
+
+        body.ember-mode .sub-section-title { color: #ff8c00; }
+
+        body.ember-mode .sub-section-count {
+            background: rgba(255, 140, 0, 0.12);
+            color: #ffb347;
+        }
+
+        body.ember-mode .sub-section-body .finding-item {
+            border-bottom-color: #3d2a1a;
+        }
+
+        body.ember-mode .collapsible-content {
+            scrollbar-color: #3d2a1a transparent;
+        }
+
+        body.ember-mode .collapsible-content::-webkit-scrollbar-thumb {
+            background: #3d2a1a;
+        }
+
+        body.ember-mode .collapsible-content::-webkit-scrollbar-thumb:hover {
+            background: #5a3d25;
+        }
+
+        body.ember-mode .domain-item {
+            background: #0d0906;
+            border-left-color: #cc7a00;
+            color: #e8d5c4;
+        }
+
+        body.ember-mode .target-btn {
+            background: linear-gradient(135deg, #1a120d 0%, #201510 100%);
+            border-color: #3d2a1a;
+            color: #a07850;
+        }
+
+        body.ember-mode .target-btn:hover {
+            border-color: #ff8c00;
+        }
+
+        body.ember-mode .target-btn.active {
+            border-color: #ff8c00;
+            color: #e8d5c4;
+            box-shadow: 0 0 8px rgba(255, 140, 0, 0.2);
+        }
+
+        body.ember-mode footer {
+            color: #a07850;
+            border-top-color: #3d2a1a;
+        }
+
+        body.ember-mode .footer-links a { color: #ff8c00; }
+        body.ember-mode .footer-links a:hover { color: #ffb347; }
+
+        body.ember-mode .severity-critical { background: #ff4040; }
+        body.ember-mode .severity-high { background: #ff8c00; }
+        body.ember-mode .severity-medium { background: #ffb347; color: #000; }
+        body.ember-mode .severity-low { background: #cc7a00; }
+
+        body.ember-mode .info-icon {
+            border-color: #3d2a1a;
+            color: #a07850;
+        }
+
+        body.ember-mode .info-icon:hover {
+            border-color: #ff8c00;
+            color: #ff8c00;
+        }
+
+        body.ember-mode .info-tooltip {
+            background: #1a120d;
+            border-color: #ff8c00;
+            box-shadow: 0 0 25px rgba(255, 140, 0, 0.12);
+        }
+
+        body.ember-mode .info-tooltip-title { color: #ff8c00; }
+        body.ember-mode .info-tooltip-body { color: #e8d5c4; }
+        body.ember-mode .info-tooltip-risk {
+            border-top-color: #3d2a1a;
+            color: #ff4040;
+        }
     </style>
 </head>
 <body>
@@ -818,38 +1276,40 @@
             <span class="status-badge status-running" id="status-badge">RUNNING</span>
         </div>
 
-        <div class="stats-grid" id="stats-grid">
-            <div class="stat-card critical">
-                <div class="stat-number" id="stat-critical">0</div>
-                <div class="stat-label">Critical</div>
+        <div class="main-layout">
+            <div class="stats-sidebar" id="stats-sidebar">
+                <div class="stat-card critical">
+                    <div class="stat-number" id="stat-critical">0</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+                <div class="stat-card high">
+                    <div class="stat-number" id="stat-high">0</div>
+                    <div class="stat-label">High</div>
+                </div>
+                <div class="stat-card medium">
+                    <div class="stat-number" id="stat-medium">0</div>
+                    <div class="stat-label">Medium</div>
+                </div>
+                <div class="stat-card low">
+                    <div class="stat-number" id="stat-low">0</div>
+                    <div class="stat-label">Low / Info</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #ff6b6b;" id="stat-dos">0</div>
+                    <div class="stat-label">DoS Vectors</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #64ffda;" id="stat-endpoints">0</div>
+                    <div class="stat-label">Endpoints</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #48dbfb;" id="stat-infra">-</div>
+                    <div class="stat-label">Deployment</div>
+                </div>
             </div>
-            <div class="stat-card high">
-                <div class="stat-number" id="stat-high">0</div>
-                <div class="stat-label">High</div>
-            </div>
-            <div class="stat-card medium">
-                <div class="stat-number" id="stat-medium">0</div>
-                <div class="stat-label">Medium</div>
-            </div>
-            <div class="stat-card low">
-                <div class="stat-number" id="stat-low">0</div>
-                <div class="stat-label">Low / Info</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" style="color: #ff6b6b;" id="stat-dos">0</div>
-                <div class="stat-label">DoS Vectors</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" style="color: #64ffda;" id="stat-endpoints">0</div>
-                <div class="stat-label">Accessible Endpoints</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" style="color: #48dbfb;" id="stat-infra">-</div>
-                <div class="stat-label">Deployment</div>
-            </div>
-        </div>
 
-        <div id="findings-container"></div>
+            <div class="findings-panel" id="findings-container"></div>
+        </div>
 
         <footer>
             <p>FireThief v1.0 - Prometheus Security Scanner</p>
@@ -868,7 +1328,10 @@
         const targetCount = {{ targets|length }};
         const userToggledSections = {};
         let anyScanRunning = true;
-        let isDarkMode = true;
+        let currentTheme = 'dark';
+        const THEMES = ['dark', 'light', 'matrix', 'ember'];
+        const THEME_ICONS = { dark: '\u2600\uFE0F', light: '\uD83C\uDF19', matrix: '\uD83D\uDCBB', ember: '\uD83D\uDD25' };
+        const THEME_CLASS = { dark: '', light: 'light-mode', matrix: 'matrix-mode', ember: 'ember-mode' };
 
         const SECTION_INFO = {
             infra: {
@@ -923,21 +1386,27 @@
             }
         };
 
+        function applyTheme(theme) {
+            currentTheme = theme;
+            document.body.classList.remove('light-mode', 'matrix-mode', 'ember-mode');
+            const cls = THEME_CLASS[theme];
+            if (cls) document.body.classList.add(cls);
+            const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+            document.getElementById('themeBtn').textContent = THEME_ICONS[nextTheme];
+            document.getElementById('themeBtn').title = 'Switch to ' + nextTheme + ' theme';
+        }
+
         (function initTheme() {
             const saved = localStorage.getItem('firethiefTheme');
-            if (saved === 'light') {
-                isDarkMode = false;
-                document.body.classList.add('light-mode');
-                const btn = document.getElementById('themeBtn');
-                if (btn) btn.innerHTML = '&#x1F319;';
+            if (saved && THEMES.includes(saved)) {
+                applyTheme(saved);
             }
         })();
 
         function toggleTheme() {
-            isDarkMode = !isDarkMode;
-            document.body.classList.toggle('light-mode', !isDarkMode);
-            document.getElementById('themeBtn').innerHTML = isDarkMode ? '&#x2600;&#xFE0F;' : '&#x1F319;';
-            localStorage.setItem('firethiefTheme', isDarkMode ? 'dark' : 'light');
+            const next = THEMES[(THEMES.indexOf(currentTheme) + 1) % THEMES.length];
+            applyTheme(next);
+            localStorage.setItem('firethiefTheme', next);
         }
 
         function selectTarget(idx) {
